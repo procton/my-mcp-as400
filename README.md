@@ -6,6 +6,7 @@ Si collega a qualunque client MCP su stdio; sono documentati [Claude Code](#clau
 [Codex](#codex) e [OpenCode](#opencode).
 
 Basato su `node-jt400` (JDBC JT400 via bridge Java): richiede **Node >= 22** e **un JDK/JRE Java**.
+Testato su **IBM i 7.4**. Per verificare la compatibilità con altra versioni, utilizzare il comando **npm run test:e2e**
 
 ## Tool disponibili
 
