@@ -1,0 +1,31 @@
+{
+  "name": "my-mcp-as400",
+  "version": "0.1.0",
+  "description": "MCP server (stdio) in read-only per IBM i (AS/400): sorgenti, IFS, PF/LF, code di stampa, SQL",
+  "type": "module",
+  "main": "dist/index.js",
+  "private": true,
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "node --import tsx --test --test-force-exit test/*.test.ts",
+    "test:connection": "tsx scripts/test-connection.ts"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.32.2",
+    "java": "^0.18.0",
+    "dotenv": "^16.4.5",
+    "node-jt400": "^7.0.1",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22",
+    "tsx": "^4.19.0",
+    "typescript": "^5.6.0"
+  }
+}
