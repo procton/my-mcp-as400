@@ -29,6 +29,31 @@ Basato su `node-jt400` (JDBC JT400 via bridge Java): richiede **Node >= 22** e *
 | `as400_spool_read` | contenuto di uno spool (SCS, AFPDS, LINE, USERASCII) come testo, con `daPagina`/`aPagina` |
 | `as400_dds_describe` | struttura di PF/LF/DSPF/PRTF dal sorgente DDS: formati, campi, posizioni, chiavi, parole chiave |
 
+## Risorse MCP
+
+Oltre ai tool, il server espone risorse che il client può allegare al contesto (con completamento di libreria, file e membro):
+
+| URI | Contenuto |
+|---|---|
+| `as400://sistema` | utente, versione IBM i e limiti attivi (JSON) |
+| `as400://source/{lib}/{file}/{member}` | testo di un membro sorgente, con le colonne originali |
+| `as400://file/{lib}/{name}` | descrizione JSON di un file (campi, tipi, chiave DDS) |
+| `as400://ifs/{percorso}` | file di testo IFS, es. `as400://ifs/home/profilo/script.sh` |
+| `as400://spool/{lib}/{outq}/{file}/{numero}` | contenuto testuale di un file di spool |
+
+Le risorse usano la stessa logica dei tool: valgono `ALLOWED_LIBS`, `IFS_ALLOWED_PREFIXES`, i limiti e l'audit.
+
+## Prompt MCP
+
+| Prompt | Cosa chiede al modello |
+|---|---|
+| `spiega_programma` | leggere un sorgente RPG/CL, analizzarne i riferimenti e spiegarne scopo, flusso e anomalie |
+| `documenta_libreria` | produrre un documento Markdown con programmi, file e dipendenze di una libreria |
+| `analizza_file` | spiegare un file: campi, chiavi, logici, vincoli, dati di esempio, chi lo usa |
+| `dove_e_usato` | trovare gli usi di un file, campo, programma o data area |
+| `analizza_spool` | trovare e leggere spool e joblog, riassumere gli errori |
+| `spiega_stampa` | descrivere il layout di un PRTF/DSPF e confrontarlo con gli spool reali |
+
 ## Configurazione
 
 ```bash
@@ -50,6 +75,7 @@ npm run build
 npm run test:connection
 npm test            # test unitari (non richiedono connessione)
 npm run typecheck
+npm run test:e2e    # avvia il server e lo prova con un client MCP (richiede la connessione all'IBM i)
 ```
 
 ## Integrazione con Claude Code

@@ -11,6 +11,8 @@ import { spoolList, spoolRead, spoolSearch, spoolInfo } from './tools/spool.js';
 import { systemInfo } from './tools/system.js';
 import { objectList, objectDescribe } from './tools/objects.js';
 import { ddsDescribe } from './tools/dds.js';
+import { registerResources } from './resources.js';
+import { registerPrompts } from './prompts.js';
 import { sourceSearch, sourceRefs } from './tools/source.js';
 import { schemaList, tableList, columnSearch, indexList, whereUsed, viewDef, constraints, routineList } from './tools/catalog.js';
 
@@ -467,6 +469,9 @@ async function main(): Promise<void> {
     },
     ddsDescribe,
   );
+
+  registerResources(server);
+  registerPrompts(server);
 
   const transport = new StdioServerTransport();
   await server.connect(transport);
