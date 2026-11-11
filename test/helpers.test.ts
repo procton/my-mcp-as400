@@ -7,6 +7,7 @@ process.env.AS400_PASSWORD ??= 'test';
 
 const { parseJdbcExtra, objName, ifsPath } = await import('../src/config.js');
 const { likeRegex, numberLines, capText } = await import('../src/tools/common.js');
+const { nameCond } = await import('../src/tools/catalog.js');
 const { jsonify, likeP } = await import('../src/pool.js');
 
 test('parseJdbcExtra', () => {
@@ -57,7 +58,6 @@ test('jsonify', () => {
   assert.equal(likeP(' ab '), 'AB');
 });
 
-const { nameCond } = await import('../src/tools/catalog.js');
 test('nameCond: = senza jolly (colonne CHAR), LIKE con jolly', () => {
   assert.deepEqual(nameCond('C', 'abc'), { sql: 'C = ?', param: 'ABC' });
   assert.deepEqual(nameCond('C', 'ab%'), { sql: 'C LIKE ?', param: 'AB%' });
