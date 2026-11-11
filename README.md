@@ -9,13 +9,13 @@ It works with any MCP client that can launch a local stdio server; [Claude Code]
 
 Built on `node-jt400` (JDBC JT400 through a Java bridge): requires **Node >= 22** and **a Java JDK**.
 Tested on **IBM i 7.4**. To check compatibility with other releases, run **npm run test:e2e**
-(see section 9 of the [troubleshooting guide](docs/RISOLUZIONE-PROBLEMI.md#9-release-ibm-i-precedenti-alla-74), in Italian).
+(see section 9 of the [troubleshooting guide](docs/TROUBLESHOOTING.md#9-ibm-i-releases-earlier-than-74)).
 
 > **Language of the server.** Tool names are in English, but the server's tool descriptions, result field names
 > (for example `libreria`, `righe`, `elenco`), error messages, prompt names and prompt texts are in Italian,
 > as are the names of many tool parameters (`libreria`, `file`, `membro`, `percorso`, `daRiga`, ...).
 > Names are given exactly as the server exposes them in the tables below.
-> The troubleshooting guide is also available in Italian only.
+> The [troubleshooting guide](docs/TROUBLESHOOTING.md) quotes the Italian error messages literally, with their meaning in English.
 
 ## Available tools
 
@@ -219,12 +219,12 @@ level). If you edit the file by hand, use the format written by the `opencode mc
 Codex 0.167.0's configuration syntax was verified with its own `codex mcp list` command.
 The connection with each real client, with a model calling the tools, has not been tried; for OpenCode it was not
 possible to confirm how its `list` command reads the entry written by `add`. If something does not work, see the
-[troubleshooting guide](docs/RISOLUZIONE-PROBLEMI.md#3-il-server-non-compare-o-non-risponde-nel-client-mcp) (in Italian).
+[troubleshooting guide](docs/TROUBLESHOOTING.md#3-the-server-does-not-appear-or-does-not-respond-in-the-mcp-client).
 
 ## Troubleshooting
 
 For installation, connection, authorities, tool error messages, wrong characters, slowness and compatibility with 7.3,
-see the [troubleshooting guide](docs/RISOLUZIONE-PROBLEMI.md) (in Italian).
+see the [troubleshooting guide](docs/TROUBLESHOOTING.md) (also available [in Italian](docs/RISOLUZIONE-PROBLEMI.md)).
 
 ## Security notes
 

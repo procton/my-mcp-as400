@@ -1,5 +1,7 @@
 # Risoluzione dei problemi
 
+**Lingua / Language:** [English](TROUBLESHOOTING.md) · Italiano
+
 Guida ai problemi più comuni di `my-mcp-as400`. Torna al [README](../README.it.md).
 
 Le soluzioni qui sotto vengono da casi incontrati durante lo sviluppo, verificati su un IBM i V7R4. Dove una cosa non è stata
