@@ -84,6 +84,34 @@ export function promptSpiegaStampa(lib: string, oggetto: string): string {
 Descrivi in italiano il layout (anche come schema testuale a colonne per le stampe), i campi di ingresso/uscita, gli indicatori e i tasti funzione per i video.`;
 }
 
+export function promptInterrogaDati(lib: string, domanda: string, file?: string): string {
+  const partenza = file ? `\nFile da cui partire: ${lib}/${file} (verifica comunque che sia quello giusto).` : '';
+  return `Rispondi a una domanda sui dati del database di un sistema IBM i.
+
+Domanda: "${domanda}"
+Libreria dei dati: ${lib}${partenza}
+
+Procedi così:
+1. Individua i file giusti: as400_table_list (filtri su nome o testo della descrizione) e, se la domanda cita un concetto o un campo, as400_column_search (per nome o per testo). Le librerie hanno migliaia di file: usa i filtri.
+2. Per ogni file candidato usa as400_file_desc: nomi di sistema dei campi, tipo, lunghezza, decimali, descrizioni e chiave. Non indovinare i nomi dei campi.
+3. Se servono più file, ricava chiavi e relazioni con as400_index_list e as400_constraints, e verifica che il collegamento sia sensato prima di unirli.
+4. Scrivi una SELECT (o WITH) alla volta, con nomi qualificati ${lib}.FILE, solo i campi necessari, un WHERE preciso e i valori passati come parametri (?) con l'argomento "parametri", non concatenati nel testo.
+5. Se la domanda chiede un conteggio, un totale o una distribuzione, usa COUNT, SUM, GROUP BY e non leggere le righe. Per gli elenchi chiedi poche righe (FETCH FIRST 20 ROWS ONLY) e aumenta solo se serve.
+6. Esegui con as400_sql_query e controlla il risultato: se il numero di righe o i valori non hanno senso, rivedi la query invece di commentarli.
+
+Attenzione ai dati IBM i:
+- le date sono spesso numeri (AAAAMMGG o CYYMMDD) o testo, non DATE: guarda il tipo del campo prima di confrontare o ordinare;
+- i campi numerici (zoned, packed) hanno i decimali nel file_desc; nei risultati i numeri arrivano come stringhe;
+- i campi di testo tornano senza spazi finali; per i confronti usa i valori esatti del campo;
+- i nomi lunghi SQL possono differire dai nomi di sistema: usa quelli indicati da as400_file_desc;
+- il server è in sola lettura: sono ammessi solo SELECT e WITH; il numero di righe è limitato e, se il risultato indica "troncato" o una nota, dillo nella risposta;
+- se il server è configurato con una lista di librerie consentite, ogni tabella va qualificata con la libreria.
+
+Dati personali: riporta solo ciò che serve a rispondere; se basta un aggregato non copiare record di persone.
+
+Rispondi in italiano: prima la risposta alla domanda, poi la query usata (così si può verificare), le assunzioni fatte (per esempio come hai interpretato un campo) e i limiti (troncamenti, campi ambigui). Se i dati non ci sono o la domanda è ambigua, dillo e chiedi un chiarimento invece di inventare.`;
+}
+
 const msg = (text: string) => ({ messages: [{ role: 'user' as const, content: { type: 'text' as const, text } }] });
 
 export function registerPrompts(server: McpServer): void {
@@ -161,5 +189,19 @@ export function registerPrompts(server: McpServer): void {
       },
     },
     ({ libreria, oggetto }) => msg(promptSpiegaStampa(libreria, oggetto)),
+  );
+
+  server.registerPrompt(
+    'interroga_dati',
+    {
+      title: 'Interroga i dati',
+      description: 'Risponde a una domanda sui dati: trova i file e i campi giusti, scrive una SELECT di sola lettura, la esegue e riporta risposta, query e assunzioni.',
+      argsSchema: {
+        libreria: lib,
+        domanda: z.string().describe('Domanda sui dati, in linguaggio naturale'),
+        file: completable(z.string().optional().describe('File da cui partire (facoltativo)'), (v, ctx) => completeFile(ctx?.arguments?.libreria, v ?? '')),
+      },
+    },
+    ({ libreria, domanda, file }) => msg(promptInterrogaDati(libreria, domanda, file)),
   );
 }

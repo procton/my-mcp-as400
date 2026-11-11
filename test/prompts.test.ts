@@ -25,6 +25,8 @@ const samples = [
   p.promptAnalizzaSpool('UTENTE', 'QPJOBLOG', '2026-08-03'),
   p.promptAnalizzaSpool(),
   p.promptSpiegaStampa('LIB', 'DSP1'),
+  p.promptInterrogaDati('LIB', 'Quanti clienti hanno più di 3 ordini aperti?'),
+  p.promptInterrogaDati('LIB', 'Totale fatturato 2025', 'FATTURE'),
 ];
 
 test('i prompt citano solo tool esistenti', () => {
@@ -39,6 +41,16 @@ test('i prompt includono gli argomenti', () => {
   assert.match(p.promptDoveEUsato('MYLIB', 'CODCLI'), /"CODCLI"/);
   assert.match(p.promptAnalizzaSpool('PIPPO', undefined, undefined), /utente "PIPPO"/);
   assert.doesNotMatch(p.promptDocumentaLibreria('MYLIB'), /limitandoti/);
+});
+
+test('interroga_dati: domanda, libreria e file di partenza; solo lettura', () => {
+  const t = p.promptInterrogaDati('MYLIB', 'Quanti ordini ci sono?', 'ORDINI');
+  assert.match(t, /Quanti ordini ci sono\?/);
+  assert.match(t, /MYLIB\.FILE/);
+  assert.match(t, /MYLIB\/ORDINI/);
+  assert.match(t, /sola lettura/);
+  assert.match(t, /as400_file_desc/);
+  assert.doesNotMatch(p.promptInterrogaDati('MYLIB', 'x'), /File da cui partire/);
 });
 
 test('textOf: unisce il testo e rilancia gli errori', () => {

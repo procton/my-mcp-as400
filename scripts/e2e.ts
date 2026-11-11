@@ -68,10 +68,13 @@ const comp2 = await client.complete({
 ok(comp2.completion.values.includes('QRPGLESRC'), 'completamento file sorgente', comp2.completion.values.join(','));
 
 const prompts = (await client.listPrompts()).prompts;
-ok(prompts.length === 6, 'prompt registrati', prompts.map((p) => p.name).join(','));
+ok(prompts.length === 7, 'prompt registrati', prompts.map((p) => p.name).join(','));
 const gp = await client.getPrompt({ name: 'spiega_programma', arguments: { libreria: 'TSTPGMR', file: 'QRPGLESRC', membro: 'ABCRTOBJWO' } });
 const pt = (gp.messages[0].content as { text: string }).text;
 ok(/as400_source_read/.test(pt) && /TSTPGMR\/QRPGLESRC\(ABCRTOBJWO\)/.test(pt), 'prompt spiega_programma');
+const gp3 = await client.getPrompt({ name: 'interroga_dati', arguments: { libreria: 'TST90DAT', domanda: 'Quanti file logici ci sono?' } });
+const p3 = (gp3.messages[0].content as { text: string }).text;
+ok(/Quanti file logici ci sono\?/.test(p3) && /as400_sql_query/.test(p3), 'prompt interroga_dati');
 const gp2 = await client.getPrompt({ name: 'documenta_libreria', arguments: { libreria: 'TSTPGMR' } });
 ok(/as400_object_list/.test((gp2.messages[0].content as { text: string }).text), 'prompt documenta_libreria');
 

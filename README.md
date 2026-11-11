@@ -54,6 +54,7 @@ Le risorse usano la stessa logica dei tool: valgono `ALLOWED_LIBS`, `IFS_ALLOWED
 | `analizza_file` | spiegare un file: campi, chiavi, logici, vincoli, dati di esempio, chi lo usa |
 | `dove_e_usato` | trovare gli usi di un file, campo, programma o data area |
 | `analizza_spool` | trovare e leggere spool e joblog, riassumere gli errori |
+| `interroga_dati` | rispondere a una domanda sui dati: trovare file e campi giusti, scrivere una SELECT di sola lettura, eseguirla e riportare risposta, query e assunzioni |
 | `spiega_stampa` | descrivere il layout di un PRTF/DSPF e confrontarlo con gli spool reali |
 
 ## Configurazione
