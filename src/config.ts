@@ -36,6 +36,10 @@ export interface Config {
   sqlTimeoutMs: number;
   /** tempo massimo della ricerca testuale nei sorgenti (ms) */
   searchTimeoutMs: number;
+  /** byte massimi restituiti da una lettura binaria IFS */
+  ifsBinaryMaxBytes: number;
+  /** file IFS scansionati al massimo per ricerca (default) */
+  ifsSearchMaxFiles: number;
   /** membri scansionati al massimo per ricerca (default) */
   searchMaxMembers: number;
   /** file di audit (JSON lines); vuoto = solo stderr */
@@ -79,6 +83,8 @@ export function getConfig(): Config {
     spoolCharset: process.env.SPOOL_CHARSET?.trim() || 'IBM-273',
     sqlTimeoutMs: int('SQL_TIMEOUT_MS', 60000),
     searchTimeoutMs: int('SEARCH_TIMEOUT_MS', 180000),
+    ifsBinaryMaxBytes: int('IFS_BINARY_MAX_BYTES', 4096),
+    ifsSearchMaxFiles: int('IFS_SEARCH_MAX_FILES', 100),
     searchMaxMembers: int('SEARCH_MAX_MEMBERS', 150),
     auditLog: process.env.AUDIT_LOG?.trim() || undefined,
     allowQtempAlias: (process.env.ALLOW_QTEMP_ALIAS ?? 'true').toLowerCase() !== 'false',

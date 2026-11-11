@@ -16,8 +16,11 @@ Basato su `node-jt400` (JDBC JT400 via bridge Java): richiede **Node >= 22** e *
 | `as400_source_refs` | analisi statica di un membro RPG/CL/DDS: file, programmi chiamati, copy, data area, tabelle SQL, comandi, chiavi |
 | `as400_object_list` | oggetti di una libreria per tipo (*PGM, *SRVPGM, *CMD, *DTAARA, ...), con attributo e sorgente |
 | `as400_object_describe` | dettaglio di un oggetto: moduli e service program collegati, sorgente di origine, valore di una data area |
-| `as400_ifs_list` | contenuto di una directory IFS |
-| `as400_ifs_read` | file di testo IFS |
+| `as400_ifs_list` | directory IFS, anche in profondità (fino a 6 livelli) con filtro su nome e tipo |
+| `as400_ifs_stat` | tipo, dimensione, proprietario, CCSID e data di un file o directory |
+| `as400_ifs_read` | file di testo IFS; la finestra di righe è selezionata sul server |
+| `as400_ifs_read_binary` | hexdump di un file IFS a partire da un offset (binari, PDF, CCSID 65535) |
+| `as400_ifs_search` | ricerca di un testo nei file sotto una directory IFS |
 | `as400_sql_query` | SELECT read-only su PF/LF e viste QSYS2 |
 | `as400_file_desc` | descrizione PF/LF: campi, chiavi, tipo |
 | `as400_spool_list` | file di spool per outq / utente / filtro |
@@ -32,7 +35,7 @@ chmod 600 .env          # le credenziali restano locali
 ```
 
 Variabili opzionali: `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
-`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset Java degli spool, default `IBM-273`), `ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `SEARCH_TIMEOUT_MS`, `SEARCH_MAX_MEMBERS`, `AUDIT_LOG`, `ALLOWED_LIBS` (lista librerie
+`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset Java degli spool, default `IBM-273`), `ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `SEARCH_TIMEOUT_MS`, `SEARCH_MAX_MEMBERS`, `IFS_BINARY_MAX_BYTES`, `IFS_SEARCH_MAX_FILES`, `AUDIT_LOG`, `ALLOWED_LIBS` (lista librerie
 consentite), `IFS_ALLOWED_PREFIXES` (prefissi percorso IFS consentiti), `AS400_JDBC_EXTRA`
 (extraproperties JDBC in formato `chiave=valore&chiave=valore`).
 
@@ -82,8 +85,12 @@ Difesa a strati:
    (i parametri SQL non vengono registrati).
 
 Il solo punto che usa una connessione non read-only è `as400_source_read` (alias temporaneo in QTEMP),
-con istruzioni fisse e nomi validati. Limiti noti: i link simbolici IFS non vengono risolti
-(`IFS_ALLOWED_PREFIXES` lavora sul percorso testuale).
+con istruzioni fisse e nomi validati.
+
+Con `IFS_ALLOWED_PREFIXES` attivo i **collegamenti simbolici non vengono seguiti**: prima di leggere, il server
+verifica che nessun componente del percorso, dal prefisso consentito in giù, sia un `*SYMLNK`
+(un link dentro l'area consentita potrebbe puntare fuori). Nei risultati i link sono omessi.
+La ricerca IFS non opera nei file system speciali (`/QSYS.LIB`, `/QDLS`, ...).
 
 Altre misure:
 

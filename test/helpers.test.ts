@@ -42,6 +42,8 @@ test('likeRegex', () => {
   assert.ok(likeRegex('A.B').test('A.B'));
   assert.ok(!likeRegex('A.B').test('AXB'));
   assert.ok(likeRegex('').test('QUALSIASI'));
+  assert.ok(likeRegex('%.pcml').test('ABD00W.pcml'));
+  assert.ok(likeRegex('%.PCML').test('abd00w.pcml'));
 });
 
 test('numberLines / capText', () => {

@@ -5,7 +5,7 @@ import { z } from 'zod';
 import { getConfig } from './config.js';
 import { closePool } from './pool.js';
 import { sourceList, sourceRead } from './tools/source.js';
-import { ifsList, ifsRead } from './tools/ifs.js';
+import { ifsList, ifsRead, ifsStat, ifsReadBinary, ifsSearch } from './tools/ifs.js';
 import { sqlQuery, fileDesc } from './tools/sql.js';
 import { spoolList, spoolRead } from './tools/spool.js';
 import { systemInfo } from './tools/system.js';
@@ -78,9 +78,13 @@ async function main(): Promise<void> {
     {
       title: 'Elenca directory IFS',
       description:
-        'Elenca il contenuto di primo livello di una directory IFS via QSYS2.IFS_OBJECT_STATISTICS.',
+        'Elenca il contenuto di una directory IFS (QSYS2.IFS_OBJECT_STATISTICS), anche in profondità fino a 6 livelli, con filtro su nome e tipo. Con IFS_ALLOWED_PREFIXES i collegamenti simbolici non vengono seguiti.',
       inputSchema: {
         percorso: z.string().describe('Percorso assoluto (es. /home/profilo)'),
+        profondita: z.number().int().min(1).max(6).optional().describe('Livelli da scendere (default 1)'),
+        filtro: z.string().optional().describe('Filtro nome (SQL LIKE), es. %.sh'),
+        tipo: z.enum(['tutti', 'file', 'directory']).optional().describe("Default 'tutti'"),
+        maxVoci: z.number().int().min(1).max(2000).optional().describe('Massimo voci (default 500)'),
       },
       annotations: READ_ONLY,
     },
@@ -88,19 +92,69 @@ async function main(): Promise<void> {
   );
 
   server.registerTool(
+    'as400_ifs_stat',
+    {
+      title: 'Info su file o directory IFS',
+      description: 'Tipo, dimensione, proprietario, CCSID e data di modifica di un percorso IFS (per le directory anche il numero di voci).',
+      inputSchema: { percorso: z.string().describe('Percorso assoluto') },
+      annotations: READ_ONLY,
+    },
+    ifsStat,
+  );
+
+  server.registerTool(
     'as400_ifs_read',
     {
       title: 'Leggi file IFS',
       description:
-        'Legge un file di testo IFS via QSYS2.IFS_READ (decodifica CCSID). Usa daRiga per file lunghi.',
+        'Legge un file di testo IFS (QSYS2.IFS_READ, decodifica secondo il CCSID del file). La finestra di righe (daRiga/aRiga) è selezionata sul server, quindi è efficiente anche su file grandi. Conserva l\'indentazione.',
       inputSchema: {
         percorso: z.string().describe('Percorso assoluto del file'),
         numeriRiga: z.boolean().optional().describe('Numeri di riga prefissati (default true)'),
         daRiga: z.number().int().min(1).optional().describe('Riga di partenza (1-based)'),
+        aRiga: z.number().int().min(1).optional().describe('Riga di fine inclusa'),
+        utf8: z.boolean().optional().describe('Forza UTF-8 (se il CCSID del file non è corretto)'),
       },
       annotations: READ_ONLY,
     },
     ifsRead,
+  );
+
+  server.registerTool(
+    'as400_ifs_read_binary',
+    {
+      title: 'Anteprima binaria (hexdump) di un file IFS',
+      description:
+        'Mostra byte esadecimali e ASCII di un file IFS a partire da un offset (max IFS_BINARY_MAX_BYTES). Per file binari, PDF, archivi e file con CCSID 65535.',
+      inputSchema: {
+        percorso: z.string().describe('Percorso assoluto del file'),
+        offset: z.number().int().min(0).optional().describe('Byte di partenza (default 0)'),
+        lunghezza: z.number().int().min(1).optional().describe('Byte da leggere (default 256)'),
+      },
+      annotations: READ_ONLY,
+    },
+    ifsReadBinary,
+  );
+
+  server.registerTool(
+    'as400_ifs_search',
+    {
+      title: 'Cerca testo nei file IFS',
+      description:
+        'Cerca un testo nei file di testo sotto una directory IFS (fino a 6 livelli): restituisce file, numero di riga e testo. Salta binari (CCSID 65535) e file molto grandi. Non disponibile in QSYS.LIB: per i sorgenti usa as400_source_search.',
+      inputSchema: {
+        percorso: z.string().describe('Directory di partenza'),
+        testo: z.string().min(2).describe('Testo da cercare (sottostringa)'),
+        profondita: z.number().int().min(1).max(6).optional().describe('Livelli (default 3)'),
+        filtro: z.string().optional().describe('Filtro nome file (SQL LIKE), es. %.sh'),
+        maiuscole: z.boolean().optional().describe('Distingue maiuscole/minuscole (default false)'),
+        limite: z.number().int().min(1).max(1000).optional().describe('Massimo righe trovate (default 100)'),
+        maxFile: z.number().int().min(1).optional().describe('Massimo file scansionati (default IFS_SEARCH_MAX_FILES)'),
+        maxByteFile: z.number().int().min(1).optional().describe('Salta file più grandi di N byte (default 1000000)'),
+      },
+      annotations: READ_ONLY,
+    },
+    ifsSearch,
   );
 
   server.registerTool(

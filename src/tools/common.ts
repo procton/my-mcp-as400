@@ -44,7 +44,7 @@ export function capText(s: string, maxChars: number, what = 'testo'): string {
   return s.slice(0, maxChars) + `\n...[${what} troncato: ${s.length - maxChars} caratteri omessi; aumenta il limite o riduci l'intervallo]`;
 }
 
-/** Converte un pattern LIKE SQL in RegExp JS. */
+/** Converte un pattern LIKE SQL in RegExp JS (senza distinzione maiuscole/minuscole, come i nomi IBM i). */
 export function likeRegex(pattern: string, defaultValue = '%'): RegExp {
   const p = (pattern || defaultValue).trim().toUpperCase();
   let re = '';
@@ -53,7 +53,7 @@ export function likeRegex(pattern: string, defaultValue = '%'): RegExp {
     else if (ch === '_') re += '.';
     else re += ch.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
   }
-  return new RegExp('^' + re + '$', 's');
+  return new RegExp('^' + re + '$', 'is');
 }
 
 /** Cerca una chiave in una riga ignorando maiuscole/minuscole (risultati JDBC cambiano casing). */
