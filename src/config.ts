@@ -1,4 +1,13 @@
-import 'dotenv/config';
+import { config as loadEnv } from 'dotenv';
+import { fileURLToPath } from 'node:url';
+import path from 'node:path';
+
+// Il .env si cerca prima nella cartella del progetto (accanto a src/ o dist/), poi nella directory corrente.
+// dotenv/config userebbe solo la directory corrente, che per un server avviato da Claude Code è il progetto
+// aperto dall'utente e non quello del server. Le variabili già presenti nell'ambiente non vengono sovrascritte.
+const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
+loadEnv({ path: path.join(serverDir, '.env'), quiet: true });
+loadEnv({ quiet: true });
 
 function required(name: string): string {
   const v = process.env[name];

@@ -2,6 +2,8 @@
  * Richiede la connessione all'IBM i (.env). Uso: npm run build && npm run test:e2e */
 import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js';
+import os from 'node:os';
+import path from 'node:path';
 
 let failed = 0;
 const ok = (cond: boolean, name: string, extra = ''): void => {
@@ -11,7 +13,8 @@ const ok = (cond: boolean, name: string, extra = ''): void => {
 const textOf = (r: { content?: Array<{ type: string; text?: string }> }): string =>
   (r.content ?? []).map((c) => c.text ?? '').join('\n');
 
-const transport = new StdioClientTransport({ command: 'node', args: ['dist/index.js'], stderr: 'ignore' });
+// directory di lavoro diversa da quella del progetto, come quando Claude Code lo avvia da un altro progetto
+const transport = new StdioClientTransport({ command: 'node', args: [path.resolve('dist/index.js')], cwd: os.tmpdir(), stderr: 'ignore' });
 const client = new Client({ name: 'e2e', version: '1.0.0' });
 await client.connect(transport);
 

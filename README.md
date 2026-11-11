@@ -97,7 +97,12 @@ oppure in `.mcp.json` del progetto:
 }
 ```
 
-Le credenziali vengono lette dal `.env` della directory del server (`dotenv`).
+Le credenziali vengono lette dal `.env` nella cartella del progetto (accanto a `package.json`), indipendentemente dalla directory da cui Claude Code avvia il server; se non c'è, dal `.env` della directory corrente. Le variabili già presenti nell'ambiente hanno la precedenza.
+
+## Problemi
+
+Per installazione, connessione, autorità, messaggi di errore dei tool, caratteri sbagliati, lentezza e compatibilità con la 7.3
+vedi la [guida alla risoluzione dei problemi](docs/RISOLUZIONE-PROBLEMI.md).
 
 ## Note di sicurezza
 
