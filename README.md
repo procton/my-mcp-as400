@@ -12,6 +12,10 @@ Basato su `node-jt400` (JDBC JT400 via bridge Java): richiede **Node >= 22** e *
 | `as400_system_info` | utente connesso, sistema, limiti attivi |
 | `as400_source_list` | file sorgente di una libreria / membri di un file sorgente |
 | `as400_source_read` | testo di un membro sorgente (RPG, CL, DDS, ...) |
+| `as400_source_search` | cerca un testo in tutti i membri sorgente di una libreria (righe trovate, con file/membro/riga) |
+| `as400_source_refs` | analisi statica di un membro RPG/CL/DDS: file, programmi chiamati, copy, data area, tabelle SQL, comandi, chiavi |
+| `as400_object_list` | oggetti di una libreria per tipo (*PGM, *SRVPGM, *CMD, *DTAARA, ...), con attributo e sorgente |
+| `as400_object_describe` | dettaglio di un oggetto: moduli e service program collegati, sorgente di origine, valore di una data area |
 | `as400_ifs_list` | contenuto di una directory IFS |
 | `as400_ifs_read` | file di testo IFS |
 | `as400_sql_query` | SELECT read-only su PF/LF e viste QSYS2 |
@@ -28,7 +32,7 @@ chmod 600 .env          # le credenziali restano locali
 ```
 
 Variabili opzionali: `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
-`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset Java degli spool, default `IBM-273`), `ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `AUDIT_LOG`, `ALLOWED_LIBS` (lista librerie
+`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset Java degli spool, default `IBM-273`), `ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `SEARCH_TIMEOUT_MS`, `SEARCH_MAX_MEMBERS`, `AUDIT_LOG`, `ALLOWED_LIBS` (lista librerie
 consentite), `IFS_ALLOWED_PREFIXES` (prefissi percorso IFS consentiti), `AS400_JDBC_EXTRA`
 (extraproperties JDBC in formato `chiave=valore&chiave=valore`).
 

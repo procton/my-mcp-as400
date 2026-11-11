@@ -22,7 +22,7 @@ export const sqlQuery = tool<
 >('as400_sql_query', async (args): Promise<ToolResult> => {
   const cfg = getConfig();
   const g = guardReadOnlySql(args.query, { allowedLibs: cfg.allowedLibs, maxRows: cfg.sqlMaxRows });
-  let rows = await normalizedQuery(g.sql, args.parametri ?? []);
+  let rows = await normalizedQuery(g.sql, args.parametri ?? [], { trim: false });
   // difesa in profondità: anche con un FETCH FIRST esplicito dell'utente il tetto resta SQL_MAX_ROWS
   const troncato = rows.length > cfg.sqlMaxRows;
   if (troncato) rows = rows.slice(0, cfg.sqlMaxRows);

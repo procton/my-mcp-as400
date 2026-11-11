@@ -34,6 +34,10 @@ export interface Config {
   spoolCharset: string;
   /** timeout massimo di una query SQL (ms) */
   sqlTimeoutMs: number;
+  /** tempo massimo della ricerca testuale nei sorgenti (ms) */
+  searchTimeoutMs: number;
+  /** membri scansionati al massimo per ricerca (default) */
+  searchMaxMembers: number;
   /** file di audit (JSON lines); vuoto = solo stderr */
   auditLog?: string;
   /** crea alias temporanei in QTEMP per leggere membri di file sorgente */
@@ -74,6 +78,8 @@ export function getConfig(): Config {
     sourceMaxChars: int('SOURCE_MAX_CHARS', 400000),
     spoolCharset: process.env.SPOOL_CHARSET?.trim() || 'IBM-273',
     sqlTimeoutMs: int('SQL_TIMEOUT_MS', 60000),
+    searchTimeoutMs: int('SEARCH_TIMEOUT_MS', 180000),
+    searchMaxMembers: int('SEARCH_MAX_MEMBERS', 150),
     auditLog: process.env.AUDIT_LOG?.trim() || undefined,
     allowQtempAlias: (process.env.ALLOW_QTEMP_ALIAS ?? 'true').toLowerCase() !== 'false',
     allowedLibs: process.env.ALLOWED_LIBS

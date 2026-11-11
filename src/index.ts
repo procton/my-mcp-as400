@@ -9,6 +9,8 @@ import { ifsList, ifsRead } from './tools/ifs.js';
 import { sqlQuery, fileDesc } from './tools/sql.js';
 import { spoolList, spoolRead } from './tools/spool.js';
 import { systemInfo } from './tools/system.js';
+import { objectList, objectDescribe } from './tools/objects.js';
+import { sourceSearch, sourceRefs } from './tools/source.js';
 import { schemaList, tableList, columnSearch, indexList, whereUsed, viewDef, constraints, routineList } from './tools/catalog.js';
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
@@ -276,6 +278,78 @@ async function main(): Promise<void> {
       annotations: READ_ONLY,
     },
     routineList,
+  );
+
+  server.registerTool(
+    'as400_source_search',
+    {
+      title: 'Cerca testo nei sorgenti',
+      description:
+        'Cerca un testo (sottostringa) in tutti i membri sorgente di una libreria o di file sorgente selezionati; restituisce file, membro, numero di riga e testo. Esegue la scansione lato server; con molti membri può richiedere decine di secondi: restringi con file/membro.',
+      inputSchema: {
+        libreria: LIB,
+        testo: z.string().min(2).describe('Testo da cercare (sottostringa, non regex)'),
+        file: z.string().optional().describe('File sorgente (SQL LIKE, es. QRPGLESRC); default tutti'),
+        membro: z.string().optional().describe('Filtro nome membro (SQL LIKE)'),
+        maiuscole: z.boolean().optional().describe('Distingue maiuscole/minuscole (default false)'),
+        limite: z.number().int().min(1).max(1000).optional().describe('Massimo righe trovate (default 100)'),
+        maxMembri: z.number().int().min(1).optional().describe('Massimo membri scansionati (default SEARCH_MAX_MEMBERS)'),
+      },
+      annotations: READ_ONLY,
+    },
+    sourceSearch,
+  );
+
+  server.registerTool(
+    'as400_source_refs',
+    {
+      title: 'Riferimenti di un sorgente',
+      description:
+        'Analisi statica di un membro RPG/CL/DDS: file usati (con modo di accesso), programmi e procedure chiamati, /COPY, data area, tabelle SQL, comandi CL, formati record e chiavi DDS. Euristica: non vede le chiamate dinamiche.',
+      inputSchema: {
+        libreria: LIB,
+        file: z.string().describe('File sorgente (es. QRPGLESRC)'),
+        membro: z.string().describe('Nome del membro'),
+        tipo: z.string().optional().describe('Tipo sorgente (RPGLE, CLLE, PF, ...); default letto dal membro'),
+      },
+      annotations: READ_ONLY,
+    },
+    sourceRefs,
+  );
+
+  server.registerTool(
+    'as400_object_list',
+    {
+      title: 'Elenca oggetti',
+      description:
+        'Elenca oggetti di una libreria (QSYS2.OBJECT_STATISTICS) per tipo (*PGM, *SRVPGM, *CMD, *DTAARA, *DTAQ, *FILE, ...): attributo/linguaggio, descrizione, date, sorgente di origine. Filtri su nome, testo e attributo.',
+      inputSchema: {
+        libreria: LIB,
+        tipo: z.string().optional().describe("Tipi separati da spazio, es. '*PGM *SRVPGM' (default *ALL)"),
+        filtro: z.string().optional().describe('Filtro nome (SQL LIKE)'),
+        testo: z.string().optional().describe('Sottostringa nella descrizione'),
+        attributo: z.string().optional().describe('Es. RPGLE, CLLE, PF'),
+        limite: LIMITE,
+      },
+      annotations: READ_ONLY,
+    },
+    objectList,
+  );
+
+  server.registerTool(
+    'as400_object_describe',
+    {
+      title: 'Descrivi oggetto',
+      description:
+        'Dettaglio di un oggetto: date, proprietario, sorgente di origine; per *PGM/*SRVPGM anche moduli e service program collegati, activation group; per *DTAARA il valore.',
+      inputSchema: {
+        libreria: LIB,
+        oggetto: z.string().describe('Nome oggetto (max 10 caratteri)'),
+        tipo: z.string().describe("Tipo oggetto, es. '*PGM', '*SRVPGM', '*DTAARA', '*FILE'"),
+      },
+      annotations: READ_ONLY,
+    },
+    objectDescribe,
   );
 
   const transport = new StdioServerTransport();

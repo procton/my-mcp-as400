@@ -47,42 +47,51 @@ export function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise
   return Promise.race([p, t]).finally(() => clearTimeout(timer));
 }
 
-export function sqlText(sql: string, params?: unknown[]): Promise<Record<string, unknown>[]> {
+export interface QueryOpts {
+  /** true (default): node-jt400 elimina gli spazi a inizio e fine stringa.
+   * false: conserva gli spazi iniziali (indentazione, colonne RPG) e toglie solo quelli finali. */
+  trim?: boolean;
+}
+
+export function sqlText(sql: string, params?: unknown[], opts?: QueryOpts): Promise<Record<string, unknown>[]> {
   const ms = getConfig().sqlTimeoutMs;
-  return withTimeout(getPool().query(sql, params ?? []), ms, 'query SQL');
+  return withTimeout(getPool().query(sql, params ?? [], opts?.trim === false ? { trim: false } : undefined), ms, 'query SQL');
 }
 
 /** Esegue una query e converte i valori "java" in tipi JSON-safe. */
 export async function normalizedQuery(
   sql: string,
   params?: unknown[],
+  opts?: QueryOpts,
 ): Promise<Record<string, unknown>[]> {
-  const rows = await sqlText(sql, params);
-  return rows.map((r) => jsonifyRow(r));
+  const rows = await sqlText(sql, params, opts);
+  const rtrim = opts?.trim === false;
+  return rows.map((r) => jsonifyRow(r, rtrim));
 }
 
-export function jsonifyRow(row: Record<string, unknown>): Record<string, unknown> {
+export function jsonifyRow(row: Record<string, unknown>, rtrim = false): Record<string, unknown> {
   const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(row)) out[k] = jsonify(v);
+  for (const [k, v] of Object.entries(row)) out[k] = jsonify(v, rtrim);
   return out;
 }
 
-export function jsonify(v: unknown): unknown {
+export function jsonify(v: unknown, rtrim = false): unknown {
   if (v === undefined) return null;
   if (v === null) return null;
   const t = typeof v;
-  if (t === 'string' || t === 'boolean') return v;
+  if (t === 'string') return rtrim ? (v as string).replace(/\s+$/, '') : v;
+  if (t === 'boolean') return v;
   if (t === 'number') return v;
   if (t === 'bigint') return v.toString();
   if (v instanceof Date) return v.toISOString();
-  if (Array.isArray(v)) return v.map(jsonify);
+  if (Array.isArray(v)) return v.map((x) => jsonify(x, rtrim));
   // wrapper CLOB/BLOB di node-jt400: {'type':'CLOB','value':'...'} → il valore puro
-  if (isClobLike(v)) return (v as { value: unknown }).value;
+  if (isClobLike(v)) return jsonify((v as { value: unknown }).value, rtrim);
   // Oggetti provenienti da node-java (java.sql.Timestamp, BigDecimal, ...):
   // non sono oggetti JS "normali": li rappresentiamo con il loro toString().
   if (isPlainObject(v)) {
     const out: Record<string, unknown> = {};
-    for (const [k, x] of Object.entries(v as Record<string, unknown>)) out[k] = jsonify(x);
+    for (const [k, x] of Object.entries(v as Record<string, unknown>)) out[k] = jsonify(x, rtrim);
     return out;
   }
   try {

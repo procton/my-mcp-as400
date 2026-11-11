@@ -55,6 +55,7 @@ export const ifsRead = tool<
   const rows = await normalizedQuery(
     `SELECT * FROM TABLE(QSYS2.IFS_READ(CAST(? AS VARCHAR(32709))))`,
     [p],
+    { trim: false }, // conserva l'indentazione
   );
   const lines = rows.map((r) => String(pick(r, 'LINE') ?? ''));
   if (lines.length === 0) {
