@@ -32,6 +32,10 @@ export interface Config {
   sourceMaxChars: number;
   /** CCSID/charset Java per decodificare gli spool (es. IBM-273, IBM-280, IBM-037) */
   spoolCharset: string;
+  /** timeout massimo di una query SQL (ms) */
+  sqlTimeoutMs: number;
+  /** file di audit (JSON lines); vuoto = solo stderr */
+  auditLog?: string;
   /** crea alias temporanei in QTEMP per leggere membri di file sorgente */
   allowQtempAlias: boolean;
   /** elenco (opzionale) di librerie consentite; vuoto = tutte */
@@ -69,6 +73,8 @@ export function getConfig(): Config {
     spoolMaxChars: int('SPOOL_MAX_CHARS', 200000),
     sourceMaxChars: int('SOURCE_MAX_CHARS', 400000),
     spoolCharset: process.env.SPOOL_CHARSET?.trim() || 'IBM-273',
+    sqlTimeoutMs: int('SQL_TIMEOUT_MS', 60000),
+    auditLog: process.env.AUDIT_LOG?.trim() || undefined,
     allowQtempAlias: (process.env.ALLOW_QTEMP_ALIAS ?? 'true').toLowerCase() !== 'false',
     allowedLibs: process.env.ALLOWED_LIBS
       ? process.env.ALLOWED_LIBS.split(',').map((s) => s.trim().toUpperCase()).filter(Boolean)
@@ -82,13 +88,25 @@ export function getConfig(): Config {
 
 /** Normalizza e valida un percorso IFS assoluto (read-only, niente attraversamento). */
 export function ifsPath(value: string): string {
-  const p = value.trim();
+  let p = value.trim();
   if (!p.startsWith('/')) throw new Error(`Percorso IFS non valido (deve essere assoluto): ${value}`);
-  if (p.split('/').some((seg) => seg === '..')) throw new Error(`Percorso IFS non valido (componente '..' vietata): ${value}`);
+  if (p.includes('\0')) throw new Error('Percorso IFS non valido (carattere nullo)');
+  // normalizza: '//' , '/./' e '/' finale; '..' vietato
+  const segs = p.split('/').filter((seg) => seg !== '' && seg !== '.');
+  if (segs.includes('..')) throw new Error(`Percorso IFS non valido (componente '..' vietata): ${value}`);
+  p = '/' + segs.join('/');
   if (p.length > 32709) throw new Error(`Percorso IFS troppo lungo: ${value}`);
   const cfg = cached?.ifsAllowedPrefixes;
-  if (cfg && cfg.length && !cfg.some((prefix) => p === prefix || p.startsWith(prefix + '/'))) {
-    throw new Error(`Percorso IFS non consentito (IFS_ALLOWED_PREFIXES=${cfg.join(',')}): ${p}`);
+  if (cfg && cfg.length) {
+    // /QSYS.LIB è insensibile al maiuscolo/minuscolo, il resto no
+    const ci = /^\/QSYS\.LIB(\/|$)/i.test(p);
+    const norm = (x: string): string => (ci ? x.toUpperCase() : x);
+    const okPrefix = cfg.some((raw) => {
+      const prefix = '/' + raw.split('/').filter((x) => x !== '' && x !== '.').join('/');
+      const pre = prefix === '/' ? '' : norm(prefix);
+      return norm(p) === pre || norm(p).startsWith(pre + '/');
+    });
+    if (!okPrefix) throw new Error(`Percorso IFS non consentito (IFS_ALLOWED_PREFIXES=${cfg.join(',')}): ${p}`);
   }
   return p;
 }

@@ -4,7 +4,7 @@ import { json, tool, pick } from './common.js';
 import type { ToolResult } from './common.js';
 
 /** Informazioni di sistema e di connessione (utile per diagnostica). */
-export const systemInfo = tool<Record<string, never>>(async (): Promise<ToolResult> => {
+export const systemInfo = tool<Record<string, never>>('as400_system_info', async (): Promise<ToolResult> => {
   const cfg = getConfig();
   const base = await normalizedQuery(
     `SELECT SESSION_USER AS UTENTE, CURRENT_SERVER AS SERVER, CURRENT_TIMESTAMP AS ORA

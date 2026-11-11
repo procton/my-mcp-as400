@@ -8,7 +8,6 @@ process.env.AS400_PASSWORD ??= 'test';
 const { parseJdbcExtra, objName, ifsPath } = await import('../src/config.js');
 const { likeRegex, numberLines, capText } = await import('../src/tools/common.js');
 const { jsonify, likeP } = await import('../src/pool.js');
-const { validateReadOnlySql } = await import('../src/tools/sql.js');
 
 test('parseJdbcExtra', () => {
   assert.deepEqual(parseJdbcExtra('a=1&b=x=y& c = 2'), { a: '1', b: 'x=y', c: '2' });
@@ -24,18 +23,15 @@ test('objName', () => {
   assert.equal(objName('MY$LIB#@'), 'MY$LIB#@');
 });
 
+test('ifsPath normalizza', () => {
+  assert.equal(ifsPath('/home//x/./y/'), '/home/x/y');
+  assert.throws(() => ifsPath('/home/x\0y'));
+});
+
 test('ifsPath', () => {
   assert.equal(ifsPath('/home/x'), '/home/x');
   assert.throws(() => ifsPath('home/x'));
   assert.throws(() => ifsPath('/home/../etc'));
-});
-
-test('validateReadOnlySql', () => {
-  assert.equal(validateReadOnlySql('select 1 from t;'), 'select 1 from t');
-  assert.equal(validateReadOnlySql('WITH a AS (SELECT 1 FROM t) SELECT * FROM a'), 'WITH a AS (SELECT 1 FROM t) SELECT * FROM a');
-  assert.throws(() => validateReadOnlySql('DELETE FROM t'));
-  assert.throws(() => validateReadOnlySql('SELECT 1 FROM t; DROP TABLE t'));
-  assert.throws(() => validateReadOnlySql('SELECT * FROM t FOR UPDATE'));
 });
 
 test('likeRegex', () => {

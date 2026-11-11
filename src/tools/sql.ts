@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { normalizedQuery } from '../pool.js';
 import { getConfig, objName } from '../config.js';
+import { guardReadOnlySql } from '../sqlguard.js';
 import { json, tool, pick } from './common.js';
 import type { ToolResult } from './common.js';
 
@@ -10,24 +11,22 @@ const inputQuery = {
     .describe('Parametri per i marker ? (facoltativo)'),
 };
 
-/** Valida una query read-only e ne restituisce il testo normalizzato (senza `;` finale). */
-export function validateReadOnlySql(query: string): string {
-  const q = query.trim().replace(/;+\s*$/, '');
-  if (q.includes(';')) throw new Error('Un solo statement SQL, senza punto e virgola');
-  if (!/^(SELECT|WITH)\b/i.test(q)) throw new Error('Ammesse solo istruzioni SELECT o WITH (server read-only)');
-  if (/\bFOR\s+UPDATE\b/i.test(q)) throw new Error('FOR UPDATE non consentito (server read-only)');
-  return q;
+/** Valida una query read-only (guardia lessicale + allow-list) e applica il limite di righe. */
+export function validateReadOnlySql(query: string, allowedLibs: string[] | null = null, maxRows = 1000): string {
+  return guardReadOnlySql(query, { allowedLibs, maxRows }).sql;
 }
 
 /** Esegue una SELECT read-only con limite di righe. */
 export const sqlQuery = tool<
   z.infer<z.ZodObject<typeof inputQuery>>
->(async (args): Promise<ToolResult> => {
+>('as400_sql_query', async (args): Promise<ToolResult> => {
   const cfg = getConfig();
-  const q = validateReadOnlySql(args.query);
-  const final = /\bFETCH\s+FIRST\b/i.test(q) ? q : `${q} FETCH FIRST ${cfg.sqlMaxRows} ROWS ONLY`;
-  const rows = await normalizedQuery(final, args.parametri ?? []);
-  return json({ righe: rows.length, dati: rows });
+  const g = guardReadOnlySql(args.query, { allowedLibs: cfg.allowedLibs, maxRows: cfg.sqlMaxRows });
+  let rows = await normalizedQuery(g.sql, args.parametri ?? []);
+  // difesa in profondità: anche con un FETCH FIRST esplicito dell'utente il tetto resta SQL_MAX_ROWS
+  const troncato = rows.length > cfg.sqlMaxRows;
+  if (troncato) rows = rows.slice(0, cfg.sqlMaxRows);
+  return json({ righe: rows.length, troncato: troncato || undefined, dati: rows });
 });
 
 const inputDesc = {
@@ -38,7 +37,7 @@ const inputDesc = {
 /** Descrive un file fisico/logico: oggetto, campi, chiavi, tipo. */
 export const fileDesc = tool<
   z.infer<z.ZodObject<typeof inputDesc>>
->(async (args): Promise<ToolResult> => {
+>('as400_file_desc', async (args): Promise<ToolResult> => {
   const lib = objName(args.libreria, 'libreria');
   const file = objName(args.file, 'file');
 

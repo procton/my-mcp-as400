@@ -8,24 +8,48 @@ const createPool: (cfg: Record<string, unknown>) => any =
   ((ns as { pool?: unknown }).pool as any) ?? (ns as { default?: { pool?: unknown } }).default?.pool;
 
 let poolInstance: any = null;
+let aliasPoolInstance: any = null;
 
-export function getPool(): any {
-  if (poolInstance) return poolInstance;
-  const cfg: Config = getConfig();
-  const jdbcProps: Record<string, unknown> = {
+function baseProps(cfg: Config): Record<string, unknown> {
+  return {
     host: cfg.host,
     user: cfg.user,
     password: cfg.password,
     // leggibilità dei tipi binari e conversione EBCDIC corretta via JDBC
     'translate binary': 'true',
+    // backstop di rete oltre al timeout applicativo
+    'socket timeout': String(cfg.sqlTimeoutMs + 15000),
+    ...parseJdbcExtra(cfg.jdbcExtra),
   };
-  Object.assign(jdbcProps, parseJdbcExtra(cfg.jdbcExtra));
-  poolInstance = createPool(jdbcProps);
+}
+
+/** Pool principale: connessione JDBC `access=read only` (il server rifiuta ogni scrittura). */
+export function getPool(): any {
+  if (poolInstance) return poolInstance;
+  poolInstance = createPool({ ...baseProps(getConfig()), access: 'read only' });
   return poolInstance;
 }
 
+/** Pool dedicato SOLO a source_read: serve CREATE ALIAS in QTEMP (non permesso in read-only).
+ * Esegue esclusivamente istruzioni fisse costruite dal codice con nomi validati. */
+export function getAliasPool(): any {
+  if (aliasPoolInstance) return aliasPoolInstance;
+  aliasPoolInstance = createPool(baseProps(getConfig()));
+  return aliasPoolInstance;
+}
+
+/** Rifiuta se la promessa non termina entro il timeout configurato. */
+export function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+  let timer: NodeJS.Timeout;
+  const t = new Promise<never>((_, rej) => {
+    timer = setTimeout(() => rej(new Error(`Timeout (${ms} ms) su ${what}: operazione abbandonata`)), ms);
+  });
+  return Promise.race([p, t]).finally(() => clearTimeout(timer));
+}
+
 export function sqlText(sql: string, params?: unknown[]): Promise<Record<string, unknown>[]> {
-  return getPool().query(sql, params ?? []);
+  const ms = getConfig().sqlTimeoutMs;
+  return withTimeout(getPool().query(sql, params ?? []), ms, 'query SQL');
 }
 
 /** Esegue una query e converte i valori "java" in tipi JSON-safe. */
@@ -105,12 +129,14 @@ export function likeP(value: string | undefined | null, defaultValue = '%'): str
 /** Nome del sistema IBM i connesso (CURRENT_SERVER), memoizzato. */
 /** Chiude il pool JDBC (shutdown pulito). */
 export async function closePool(): Promise<void> {
-  if (!poolInstance) return;
-  const p = poolInstance;
+  for (const p of [poolInstance, aliasPoolInstance]) {
+    if (!p) continue;
+    try {
+      await p.close();
+    } catch { /* ignora */ }
+  }
   poolInstance = null;
-  try {
-    await p.close();
-  } catch { /* ignora */ }
+  aliasPoolInstance = null;
 }
 
 let sysNameCache: string | null = null;

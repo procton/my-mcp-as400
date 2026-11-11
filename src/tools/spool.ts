@@ -15,7 +15,7 @@ const inputList = {
 /** Elenca le code di stampa di una libreria, oppure i file di spool di una coda. */
 export const spoolList = tool<
   z.infer<z.ZodObject<typeof inputList>>
->(async (args): Promise<ToolResult> => {
+>('as400_spool_list', async (args): Promise<ToolResult> => {
   const cfg = getConfig();
   const qlib = objName(args.libreria, 'libreria');
 
@@ -76,7 +76,7 @@ const inputRead = {
 /** Legge il contenuto di un file di spool: via SQL elenca e identifica, via Java (Toolbox) legge il testo. */
 export const spoolRead = tool<
   z.infer<z.ZodObject<typeof inputRead>>
->(async (args): Promise<ToolResult> => {
+>('as400_spool_read', async (args): Promise<ToolResult> => {
   const cfg = getConfig();
   const qlib = objName(args.libreria, 'libreria');
   const qoutq = objName(args.outq, 'coda di stampa');

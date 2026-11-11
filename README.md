@@ -28,7 +28,7 @@ chmod 600 .env          # le credenziali restano locali
 ```
 
 Variabili opzionali: `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
-`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset Java degli spool, default `IBM-273`), `ALLOW_QTEMP_ALIAS`, `ALLOWED_LIBS` (lista librerie
+`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset Java degli spool, default `IBM-273`), `ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `AUDIT_LOG`, `ALLOWED_LIBS` (lista librerie
 consentite), `IFS_ALLOWED_PREFIXES` (prefissi percorso IFS consentiti), `AS400_JDBC_EXTRA`
 (extraproperties JDBC in formato `chiave=valore&chiave=valore`).
 
@@ -64,6 +64,24 @@ oppure in `.mcp.json` del progetto:
 Le credenziali vengono lette dal `.env` della directory del server (`dotenv`).
 
 ## Note di sicurezza
+
+Difesa a strati:
+
+1. **Connessione JDBC `access=read only`**: il server IBM i rifiuta ogni scrittura (verificato: `CREATE`, `CALL`).
+2. **Guardia SQL lessicale** (`src/sqlguard.ts`): tokenizza la query ignorando commenti e stringhe, ammette
+   solo `SELECT`/`WITH`, vieta DML/DDL/`CALL`, `FINAL TABLE`, `QCMDEXC`, e le funzioni IFS/spool
+   (`IFS_READ`, `SPOOLED_FILE_DATA`, ...) che hanno tool dedicati con i propri controlli.
+3. **`ALLOWED_LIBS` sulla SQL**: ogni tabella in `FROM`/`JOIN` deve essere qualificata (`LIB.TABELLA`) con una
+   libreria consentita; i cataloghi `QSYS2`, `SYSIBM`, `SYSIBMADM`, `SYSTOOLS` restano leggibili (solo metadati).
+4. **Limiti**: righe, caratteri, timeout (`SQL_TIMEOUT_MS`).
+5. **Audit**: ogni chiamata è registrata come JSON su stderr e, se `AUDIT_LOG` è impostato, su file
+   (i parametri SQL non vengono registrati).
+
+Il solo punto che usa una connessione non read-only è `as400_source_read` (alias temporaneo in QTEMP),
+con istruzioni fisse e nomi validati. Limiti noti: i link simbolici IFS non vengono risolti
+(`IFS_ALLOWED_PREFIXES` lavora sul percorso testuale).
+
+Altre misure:
 
 - Server **solo lettura**: la `as400_sql_query` accetta solo `SELECT`/`WITH`, rifiuta
   statement multipli e `FOR UPDATE`; nessun tool di scrittura o esecuzione CL.

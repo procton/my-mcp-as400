@@ -1,4 +1,5 @@
 import { describeError } from '../pool.js';
+import { audit } from '../audit.js';
 
 /** Risultato di un tool MCP (solo testo). */
 export interface ToolResult {
@@ -21,13 +22,18 @@ export function error(err: unknown): ToolResult {
   return { content: [{ type: 'text', text: describeError(err) }], isError: true };
 }
 
-/** Avvolge un handler tool con gestione errori uniforme. */
-export function tool<A>(fn: (args: A) => Promise<ToolResult>): (args: A) => Promise<ToolResult> {
+/** Avvolge un handler tool con gestione errori uniforme e audit. */
+export function tool<A>(name: string, fn: (args: A) => Promise<ToolResult>): (args: A) => Promise<ToolResult> {
   return async (args: A) => {
+    const t0 = Date.now();
     try {
-      return await fn(args);
+      const res = await fn(args);
+      audit({ tool: name, args, ms: Date.now() - t0, ok: !res.isError });
+      return res;
     } catch (err) {
-      return error(err);
+      const res = error(err);
+      audit({ tool: name, args, ms: Date.now() - t0, ok: false, error: res.content[0].text.split('\n')[0].slice(0, 300) });
+      return res;
     }
   };
 }

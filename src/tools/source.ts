@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
-import { normalizedQuery, getPool, likeP } from '../pool.js';
+import { normalizedQuery, getAliasPool, withTimeout, likeP } from '../pool.js';
 import { getConfig, objName } from '../config.js';
 import { text, json, tool, capText, pick, numberLines } from './common.js';
 import type { ToolResult } from './common.js';
@@ -14,7 +14,7 @@ const inputList = {
 /** Elenca file sorgente di una libreria, oppure i membri di un file sorgente. */
 export const sourceList = tool<
   z.infer<z.ZodObject<typeof inputList>>
->(async (args): Promise<ToolResult> => {
+>('as400_source_list', async (args): Promise<ToolResult> => {
   const cfg = getConfig();
   const lib = objName(args.libreria, 'libreria');
 
@@ -73,7 +73,7 @@ const inputRead = {
 /** Legge il testo di un membro sorgente (RPG, CL, DDS, ...) tramite alias QTEMP. */
 export const sourceRead = tool<
   z.infer<z.ZodObject<typeof inputRead>>
->(async (args): Promise<ToolResult> => {
+>('as400_source_read', async (args): Promise<ToolResult> => {
   const cfg = getConfig();
   if (!cfg.allowQtempAlias) {
     throw new Error("La lettura dei membri richiede alias temporanei: imposta ALLOW_QTEMP_ALIAS=true");
@@ -85,7 +85,7 @@ export const sourceRead = tool<
 
   // CREATE ALIAS + SELECT devono girare sulla STESSA connessione (stesso job):
   // QTEMP è per-job, quindi si usa un contesto di transazione dedicato del pool.
-  const rows = (await getPool().transaction(
+  const rows = (await withTimeout(getAliasPool().transaction(
     async (tx: {
       query: (sql: string, params?: unknown[]) => Promise<Record<string, unknown>[]>;
       update: (sql: string, params?: unknown[]) => Promise<number>;
@@ -100,7 +100,7 @@ export const sourceRead = tool<
         } catch { /* ignora */ }
       }
     },
-  )) as Record<string, unknown>[];
+  ), cfg.sqlTimeoutMs, 'lettura membro')) as Record<string, unknown>[];
   const lines = rows.map((r) => String(pick(r, 'SRCDTA') ?? '').replace(/\s+$/, ''));
   const start = args.daRiga !== undefined ? args.daRiga - 1 : 0;
   const end = args.aRiga !== undefined ? args.aRiga : start + cfg.sourceMaxLines;

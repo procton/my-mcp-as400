@@ -11,7 +11,7 @@ const inputList = {
 /** Elenca il contenuto di primo livello di una directory IFS via QSYS2.IFS_OBJECT_STATISTICS. */
 export const ifsList = tool<
   z.infer<z.ZodObject<typeof inputList>>
->(async (args): Promise<ToolResult> => {
+>('as400_ifs_list', async (args): Promise<ToolResult> => {
   const p = ifsPath(args.percorso);
   // forma posizionale (percorso, subtree=NO): valida su questa release
   const rows = await normalizedQuery(
@@ -49,7 +49,7 @@ const inputRead = {
 /** Legge un file di testo IFS via QSYS2.IFS_READ. */
 export const ifsRead = tool<
   z.infer<z.ZodObject<typeof inputRead>>
->(async (args): Promise<ToolResult> => {
+>('as400_ifs_read', async (args): Promise<ToolResult> => {
   const cfg = getConfig();
   const p = ifsPath(args.percorso);
   const rows = await normalizedQuery(
