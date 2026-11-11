@@ -7,9 +7,10 @@ import { closePool } from './pool.js';
 import { sourceList, sourceRead } from './tools/source.js';
 import { ifsList, ifsRead, ifsStat, ifsReadBinary, ifsSearch } from './tools/ifs.js';
 import { sqlQuery, fileDesc } from './tools/sql.js';
-import { spoolList, spoolRead } from './tools/spool.js';
+import { spoolList, spoolRead, spoolSearch, spoolInfo } from './tools/spool.js';
 import { systemInfo } from './tools/system.js';
 import { objectList, objectDescribe } from './tools/objects.js';
+import { ddsDescribe } from './tools/dds.js';
 import { sourceSearch, sourceRefs } from './tools/source.js';
 import { schemaList, tableList, columnSearch, indexList, whereUsed, viewDef, constraints, routineList } from './tools/catalog.js';
 
@@ -188,17 +189,27 @@ async function main(): Promise<void> {
     fileDesc,
   );
 
+  const SPOOL_ID = {
+    libreria: z.string().describe('Libreria della coda di stampa (max 10 caratteri)'),
+    outq: z.string().describe('Coda di stampa (max 10 caratteri)'),
+    file: z.string().describe('Nome del file di spool (max 10 caratteri)'),
+    numero: z.number().int().optional().describe('Numero del file di spool, se il nome è duplicato'),
+    utente: z.string().optional().describe('Utente proprietario, per distinguere omonimi'),
+    job: z.string().optional().describe("Job 'numero/utente/nome', per distinguere omonimi"),
+  };
+
   server.registerTool(
     'as400_spool_list',
     {
-      title: 'Elenca code di stampa',
+      title: 'Elenca code di stampa e spool',
       description:
-        'Elenca i file di spool: con libreria+outq filtrati, altrimenti tutte le code visibili. Filtro su nome file o utente.',
+        'Senza outq: elenca le code di una libreria con numero di file e stato. Con outq: i file di spool della coda (più recenti per primi) con utente, job, pagine, tipo dati, data. Filtri su utente e nome.',
       inputSchema: {
         libreria: z.string().describe('Libreria della coda (es. QUSRSYS, QGPL)'),
-        outq: z.string().optional().describe('Coda di stampa (es. PRT01); se omessa elenca le code della libreria'),
-        utente: z.string().optional().describe('Filtra per profilo utente'),
+        outq: z.string().optional().describe('Coda di stampa; se omessa elenca le code della libreria'),
+        utente: z.string().optional().describe('Filtra per profilo utente (SQL LIKE)'),
         filtro: z.string().optional().describe('Filtro nome file di spool (SQL LIKE)'),
+        limite: z.number().int().min(1).optional().describe('Massimo file (default 100)'),
       },
       annotations: READ_ONLY,
     },
@@ -206,17 +217,51 @@ async function main(): Promise<void> {
   );
 
   server.registerTool(
+    'as400_spool_search',
+    {
+      title: 'Cerca spool in tutte le code',
+      description:
+        'Cerca file di spool in tutte le code per utente, nome, job, USRDTA, stato, tipo dati e intervallo di date di creazione. Richiede almeno un filtro. Restituisce anche la coda, da usare con as400_spool_read.',
+      inputSchema: {
+        utente: z.string().optional().describe('Utente proprietario (SQL LIKE)'),
+        file: z.string().optional().describe('Nome file di spool (SQL LIKE)'),
+        job: z.string().optional().describe("Job 'numero/utente/nome' (SQL LIKE)"),
+        datiUtente: z.string().optional().describe('Campo USRDTA (SQL LIKE)'),
+        stato: z.string().optional().describe('READY, HELD, PRINTING, SAVED, ...'),
+        tipo: z.string().optional().describe('*SCS, *AFPDS, *USERASCII, *LINE, ...'),
+        dal: z.string().optional().describe('Creati dal (AAAA-MM-GG)'),
+        al: z.string().optional().describe('Creati fino al (AAAA-MM-GG, incluso)'),
+        libreria: z.string().optional().describe('Restringe a una libreria di code'),
+        outq: z.string().optional().describe('Restringe a una coda (con libreria)'),
+        limite: z.number().int().min(1).optional().describe('Massimo file (default 100)'),
+      },
+      annotations: READ_ONLY,
+    },
+    spoolSearch,
+  );
+
+  server.registerTool(
+    'as400_spool_info',
+    {
+      title: 'Attributi di un file di spool',
+      description: 'Attributi completi di un file di spool: pagine, copie, form type, larghezza/lunghezza pagina, lpi/cpi, font, overlay, programma che lo ha aperto.',
+      inputSchema: SPOOL_ID,
+      annotations: READ_ONLY,
+    },
+    spoolInfo,
+  );
+
+  server.registerTool(
     'as400_spool_read',
     {
       title: 'Leggi file di spool',
       description:
-        'Legge il contenuto testuale di un file di spool via QSYS2.OUTPUT_QUEUE_ENTRIES; rimuove i caratteri di controllo SCS di default.',
+        'Legge il contenuto di un file di spool come testo (SCS, AFPDS, LINE, USERASCII). Il server converte il flusso in ASCII; le pagine sono separate da form feed e selezionabili con daPagina/aPagina. Per AFPDS è estratto solo il testo.',
       inputSchema: {
-        libreria: z.string().describe('Libreria della coda di stampa'),
-        outq: z.string().describe('Coda di stampa (max 10 caratteri)'),
-        file: z.string().describe('Nome del file di spool (max 10 caratteri)'),
-        numero: z.number().int().optional().describe('Numero file di spool se il nome è duplicato'),
-        pulisci: z.boolean().optional().describe('Rimuove caratteri di controllo SCS (default true)'),
+        ...SPOOL_ID,
+        daPagina: z.number().int().min(1).optional().describe('Prima pagina (1-based)'),
+        aPagina: z.number().int().min(1).optional().describe('Ultima pagina inclusa'),
+        pulisci: z.boolean().optional().describe('Rimuove i caratteri di controllo residui (default true)'),
       },
       annotations: READ_ONLY,
     },
@@ -404,6 +449,23 @@ async function main(): Promise<void> {
       annotations: READ_ONLY,
     },
     objectDescribe,
+  );
+
+  server.registerTool(
+    'as400_dds_describe',
+    {
+      title: 'Struttura di un file dal sorgente DDS',
+      description:
+        'Descrive PF, LF, DSPF e PRTF leggendo il sorgente DDS: formati record, campi (tipo, lunghezza, decimali, uso, riga/posizione, testo, intestazione), costanti di schermo/stampa, indicatori, chiavi, select/omit, parole chiave (DSPSIZ, CA03, ...). Con "oggetto" ricava il sorgente dal file compilato e avvisa se è stato modificato dopo la compilazione. Per PF/LF il catalogo SQL (as400_file_desc) resta la fonte più affidabile.',
+      inputSchema: {
+        libreria: z.string().describe('Libreria del file (con oggetto) o del sorgente (con file+membro)'),
+        oggetto: z.string().optional().describe('File compilato (PF, LF, DSPF, PRTF)'),
+        file: z.string().optional().describe('File sorgente DDS (es. QDDSSRC), in alternativa a oggetto'),
+        membro: z.string().optional().describe('Membro DDS, con file'),
+      },
+      annotations: READ_ONLY,
+    },
+    ddsDescribe,
   );
 
   const transport = new StdioServerTransport();

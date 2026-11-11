@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
 import { extractRefs, familyOf, type RefKind } from '../srcanalysis.js';
 import { nameCond } from './catalog.js';
-import { normalizedQuery, getAliasPool, withTimeout, likeP } from '../pool.js';
+import { normalizedQuery, getAliasPool, withTimeout, likeP, describeError } from '../pool.js';
 import { getConfig, objName } from '../config.js';
 import { text, json, tool, capText, pick, numberLines } from './common.js';
 import type { ToolResult } from './common.js';
@@ -72,7 +72,9 @@ export async function readMemberLines(lib: string, file: string, membro: string)
   const alias = 'MCPA' + randomBytes(4).toString('hex').toUpperCase();
   // CREATE ALIAS + SELECT devono girare sulla STESSA connessione (stesso job):
   // QTEMP è per-job, quindi si usa un contesto di transazione dedicato del pool.
-  const rows = (await withTimeout(getAliasPool().transaction(
+  let rows: Record<string, unknown>[];
+  try {
+    rows = (await withTimeout(getAliasPool().transaction(
     async (tx: AliasTx) => {
       // DDL: update() e non query() (altrimenti "Cursor state not valid"); membro tra doppi apici
       await tx.update(`CREATE OR REPLACE ALIAS QTEMP.${alias} FOR ${lib}.${file} ("${membro}")`);
@@ -86,6 +88,11 @@ export async function readMemberLines(lib: string, file: string, membro: string)
       }
     },
   ), cfg.sqlTimeoutMs, 'lettura membro')) as Record<string, unknown>[];
+  } catch (err) {
+    const msg = describeError(err);
+    if (/SQL0204|SQL0443|\*MEM/.test(msg)) throw new Error(`Membro o file sorgente non trovato: ${lib}/${file}(${membro})`);
+    throw err;
+  }
   return rows.map((r) => String(pick(r, 'SRCDTA') ?? '').replace(/\s+$/, ''));
 }
 

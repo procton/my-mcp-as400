@@ -1,10 +1,13 @@
 /* Lettura del contenuto di un file di spool via bridge Java (Toolbox JT400).
- * node-jt400 inizializza la JVM con il jt400.jar nel classpath: importando
- * il modulo 'java' nella stessa accediamo alle classi com.ibm.as400.access.
- * La chiave completa (nome, numero, job, sistema, CYYMMDD, HHMMSS) serve per
- * i file di spool il cui job possessore è terminato. */
+ * node-jt400 inizializza la JVM con il jt400.jar nel classpath: importando il modulo 'java'
+ * nella stessa processo si accede alle classi com.ibm.as400.access.
+ *
+ * Il contenuto è convertito in testo ASCII dal server (Host Print Transform, oggetto WSCST,
+ * default QWPDEFAULT): funziona per SCS, AFPDS (estrae il testo) e LINE. Gli USERASCII sono già ASCII
+ * e si leggono grezzi. Per usare la JVM già inizializzata, getPool() deve essere stato chiamato. */
 import { getConfig } from './config.js';
-import { describeError } from './pool.js';
+import { describeError, getPool } from './pool.js';
+import { decodeBytes, normalizeSpoolText } from './charset.js';
 
 interface JavaApi {
   import: (cls: string) => any;
@@ -16,13 +19,14 @@ let javaApi: JavaApi | null = null;
 
 async function getJava(): Promise<JavaApi> {
   if (javaApi) return javaApi;
+  getPool(); // assicura il classpath JT400
   const mod = await import('java');
   javaApi = ((mod as unknown as { default?: unknown }).default ?? mod) as JavaApi;
   return javaApi;
 }
 
 /** 'YYYY-MM-DD HH:MM:SS.ffffff' → { data: 'CYYMMDD', ora: 'HHMMSS' } */
-function parseTimestamp(ts: string): { data: string; ora: string } {
+export function parseTimestamp(ts: string): { data: string; ora: string } {
   const [d, t] = ts.replace('T', ' ').split(' ');
   const [y, m, dd] = d.split('-');
   const [hh, mi, ss] = (t ?? '00:00:00').split(':');
@@ -41,53 +45,67 @@ export interface SpoolKey {
   jobNumber: string;
   jobSysName: string;
   createTimestamp: string;
+  /** tipo dispositivo (*SCS, *AFPDS, *USERASCII, ...) */
+  tipo: string;
 }
 
-/** Legge il contenuto di un file di spool (testo pulito dai controlli SCS). */
-export async function readSpooledFile(key: SpoolKey, maxBytes: number): Promise<string> {
+export interface SpoolContent {
+  text: string;
+  /** il flusso aveva altri dati oltre il limite di byte */
+  truncated: boolean;
+}
+
+/** Legge il contenuto di un file di spool come testo (maxBytes = limite di byte letti dal flusso). */
+export async function readSpooledFile(key: SpoolKey, maxBytes: number): Promise<SpoolContent> {
   const java = await getJava();
   const cfg = getConfig();
   const { data, ora } = parseTimestamp(key.createTimestamp);
 
   const AS400 = java.import('com.ibm.as400.access.AS400');
   const SpooledFile = java.import('com.ibm.as400.access.SpooledFile');
-  const CharConverter = java.import('com.ibm.as400.access.CharConverter');
+  const PrintObject = java.import('com.ibm.as400.access.PrintObject');
+  const PrintParameterList = java.import('com.ibm.as400.access.PrintParameterList');
   const system = new AS400(cfg.host, cfg.user, cfg.password);
   try {
     const sf = new SpooledFile(
-      system,
-      key.nome,
-      key.numero,
-      key.jobName,
-      key.jobUser,
-      key.jobNumber,
-      key.jobSysName,
-      data,
-      ora,
+      system, key.nome, key.numero, key.jobName, key.jobUser, key.jobNumber, key.jobSysName, data, ora,
     );
-    const conv = new CharConverter(cfg.spoolCharset);
-    const buf = java.newArray('byte', new Array(65536).fill(0));
-    const is = await sf.getInputStream();
-    let acc = '';
-    let n = await is.read(buf);
-    while (n >= 0 && acc.length < maxBytes) {
-      // filtra i byte di controllo SCS (EBCDIC 0x00-0x3F) PRIMA della conversione:
-      // conserva solo testo EBCDIC (0x40-0xFF), tab (0x05), CR (0x0D) e LF (0x25)
-      const chunk = await java.callStaticMethodSync('java.util.Arrays', 'copyOf', buf, n);
-      const clean: number[] = [];
-      for (let i = 0; i < n; i++) {
-        const b = chunk[i] & 0xff;
-        if (b >= 0x40 || b === 0x05 || b === 0x0d || b === 0x25) clean.push(b);
-      }
-      if (clean.length > 0) {
-        const jbytes = java.newArray('byte', clean.map((b) => (b > 127 ? b - 256 : b)));
-        acc += String(await conv.byteArrayToString(jbytes));
-      }
-      n = await is.read(buf);
+    const raw = /USERASCII/i.test(key.tipo);
+    let is: any;
+    if (raw) {
+      is = await sf.getInputStream();
+    } else {
+      const ppl = new PrintParameterList();
+      await ppl.setParameter(await PrintObject.ATTR_WORKSTATION_CUST_OBJECT, cfg.spoolWscst);
+      await ppl.setParameter(await PrintObject.ATTR_MFGTYPE, '*WSCST');
+      is = await sf.getTransformedInputStream(ppl);
     }
-    return acc;
+    const buf = java.newArray('byte', new Array(65536).fill(0));
+    // accumulo lato Java: un solo trasferimento alla fine, non un accesso per byte attraverso il bridge
+    const ByteArrayOutputStream = java.import('java.io.ByteArrayOutputStream');
+    const bos = new ByteArrayOutputStream();
+    let total = 0;
+    let truncated = false;
+    for (;;) {
+      const n: number = await is.read(buf);
+      if (n < 0) break;
+      if (n === 0) continue;
+      await bos.write(buf, 0, n);
+      total += n;
+      if (total >= maxBytes) { truncated = true; break; }
+    }
+    try { await is.close(); } catch { /* ignora */ }
+    // il bridge converte il byte[] restituito in un array JS (valori con segno)
+    const arr = (await bos.toByteArray()) as number[];
+    const bytes = Buffer.from(Uint8Array.from(arr, (b) => b & 0xff));
+    const text = raw ? decodeBytes(bytes, 'latin1') : decodeBytes(bytes, cfg.spoolCharset);
+    return { text: normalizeSpoolText(text), truncated };
   } catch (err) {
-    throw new Error(describeError(err));
+    const msg = describeError(err);
+    if (/WSCST|workstation customi|CPF/i.test(msg)) {
+      throw new Error(`Conversione dello spool non riuscita (${msg.split('\n')[0]}). Verifica SPOOL_WSCST=${cfg.spoolWscst}`);
+    }
+    throw new Error(msg);
   } finally {
     try {
       await system.disconnectAllServices();

@@ -23,8 +23,11 @@ Basato su `node-jt400` (JDBC JT400 via bridge Java): richiede **Node >= 22** e *
 | `as400_ifs_search` | ricerca di un testo nei file sotto una directory IFS |
 | `as400_sql_query` | SELECT read-only su PF/LF e viste QSYS2 |
 | `as400_file_desc` | descrizione PF/LF: campi, chiavi, tipo |
-| `as400_spool_list` | file di spool per outq / utente / filtro |
-| `as400_spool_read` | contenuto testuale di un file di spool |
+| `as400_spool_list` | code di una libreria (con numero di file) o spool di una coda, più recenti per primi |
+| `as400_spool_search` | spool in tutte le code per utente, nome, job, USRDTA, stato, tipo, intervallo di date |
+| `as400_spool_info` | attributi completi di uno spool (pagine, copie, form type, font, overlay, ...) |
+| `as400_spool_read` | contenuto di uno spool (SCS, AFPDS, LINE, USERASCII) come testo, con `daPagina`/`aPagina` |
+| `as400_dds_describe` | struttura di PF/LF/DSPF/PRTF dal sorgente DDS: formati, campi, posizioni, chiavi, parole chiave |
 
 ## Configurazione
 
@@ -35,7 +38,7 @@ chmod 600 .env          # le credenziali restano locali
 ```
 
 Variabili opzionali: `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
-`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset Java degli spool, default `IBM-273`), `ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `SEARCH_TIMEOUT_MS`, `SEARCH_MAX_MEMBERS`, `IFS_BINARY_MAX_BYTES`, `IFS_SEARCH_MAX_FILES`, `AUDIT_LOG`, `ALLOWED_LIBS` (lista librerie
+`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset ASCII del testo degli spool dopo la conversione, default `cp850`), `SPOOL_WSCST` (oggetto WSCST per la conversione, default `/QSYS.LIB/QWPDEFAULT.WSCST`), `SPOOL_MAX_READ_BYTES`, `ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `SEARCH_TIMEOUT_MS`, `SEARCH_MAX_MEMBERS`, `IFS_BINARY_MAX_BYTES`, `IFS_SEARCH_MAX_FILES`, `AUDIT_LOG`, `ALLOWED_LIBS` (lista librerie
 consentite), `IFS_ALLOWED_PREFIXES` (prefissi percorso IFS consentiti), `AS400_JDBC_EXTRA`
 (extraproperties JDBC in formato `chiave=valore&chiave=valore`).
 

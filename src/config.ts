@@ -28,10 +28,14 @@ export interface Config {
   ifsMaxChars: number;
   spoolMaxFiles: number;
   spoolMaxChars: number;
+  /** byte massimi letti dal flusso di uno spool */
+  spoolMaxReadBytes: number;
   /** limite di caratteri del testo di un membro sorgente */
   sourceMaxChars: number;
-  /** CCSID/charset Java per decodificare gli spool (es. IBM-273, IBM-280, IBM-037) */
+  /** charset ASCII del testo degli spool dopo la trasformazione (cp850, latin1, utf-8) */
   spoolCharset: string;
+  /** oggetto WSCST per la trasformazione degli spool in testo */
+  spoolWscst: string;
   /** timeout massimo di una query SQL (ms) */
   sqlTimeoutMs: number;
   /** tempo massimo della ricerca testuale nei sorgenti (ms) */
@@ -79,8 +83,10 @@ export function getConfig(): Config {
     ifsMaxChars: int('IFS_MAX_CHARS', 400000),
     spoolMaxFiles: int('SPOOL_MAX_FILES', 500),
     spoolMaxChars: int('SPOOL_MAX_CHARS', 200000),
+    spoolMaxReadBytes: int('SPOOL_MAX_READ_BYTES', 2000000),
     sourceMaxChars: int('SOURCE_MAX_CHARS', 400000),
-    spoolCharset: process.env.SPOOL_CHARSET?.trim() || 'IBM-273',
+    spoolCharset: process.env.SPOOL_CHARSET?.trim() || 'cp850',
+    spoolWscst: process.env.SPOOL_WSCST?.trim() || '/QSYS.LIB/QWPDEFAULT.WSCST',
     sqlTimeoutMs: int('SQL_TIMEOUT_MS', 60000),
     searchTimeoutMs: int('SEARCH_TIMEOUT_MS', 180000),
     ifsBinaryMaxBytes: int('IFS_BINARY_MAX_BYTES', 4096),

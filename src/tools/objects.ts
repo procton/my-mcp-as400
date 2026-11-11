@@ -29,7 +29,10 @@ export const objectList = tool<z.infer<z.ZodObject<typeof inputList>>>('as400_ob
   const tipi = typeList(args.tipo);
   const lim = Math.min(Math.max(args.limite ?? 200, 1), cfg.sqlMaxRows);
   const nc = nameCond('OBJNAME', args.filtro);
-  const params: unknown[] = [lib, tipi, nc.param];
+  // un prefisso (ABC%) è passato come nome generico (ABC*): l'API filtra prima di elencare, evitando
+  // il timeout su librerie con migliaia di oggetti
+  const prefix = args.filtro?.trim().toUpperCase().match(/^([A-Z0-9_$#@]+)%$/)?.[1];
+  const params: unknown[] = [lib, tipi, prefix ? `${prefix}*` : '*ALL', nc.param];
   let extra = '';
   if (args.testo) {
     extra += ' AND UPPER(OBJTEXT) LIKE ?';
@@ -42,7 +45,7 @@ export const objectList = tool<z.infer<z.ZodObject<typeof inputList>>>('as400_ob
   const rows = await normalizedQuery(
     `SELECT OBJNAME, OBJTYPE, OBJATTRIBUTE, OBJTEXT, OBJOWNER, OBJSIZE, OBJCREATED, CHANGE_TIMESTAMP, LAST_USED_TIMESTAMP,
             SOURCE_LIBRARY, SOURCE_FILE, SOURCE_MEMBER
-       FROM TABLE(QSYS2.OBJECT_STATISTICS(?, ?))
+       FROM TABLE(QSYS2.OBJECT_STATISTICS(?, ?, ?))
       WHERE ${nc.sql}${extra}
       ORDER BY OBJTYPE, OBJNAME
       FETCH FIRST ${lim} ROWS ONLY`,
