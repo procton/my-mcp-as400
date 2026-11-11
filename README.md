@@ -1,104 +1,126 @@
 # my-mcp-as400
 
-Server MCP (stdio) **read-only** per collegare un assistente AI a un sistema IBM i (AS/400):
-sorgenti (RPG/CL/DDS), IFS, file fisici/logici via SQL, code di stampa.
-Si collega a qualunque client MCP su stdio; sono documentati [Claude Code](#claude-code),
-[Codex](#codex) e [OpenCode](#opencode).
+**Language:** English · [Italiano](README.it.md)
 
-Basato su `node-jt400` (JDBC JT400 via bridge Java): richiede **Node >= 22** e **un JDK/JRE Java**.
-Testato su **IBM i 7.4**. Per verificare la compatibilità con altra versioni, utilizzare il comando **npm run test:e2e**
+**Read-only** MCP server (stdio) that connects an AI assistant to an IBM i (AS/400) system:
+sources (RPG/CL/DDS), IFS, physical/logical files via SQL, and output queues (spool).
+It works with any MCP client that can launch a local stdio server; [Claude Code](#claude-code),
+[Codex](#codex) and [OpenCode](#opencode) are documented below.
 
-## Tool disponibili
+Built on `node-jt400` (JDBC JT400 through a Java bridge): requires **Node >= 22** and **a Java JDK**.
+Tested on **IBM i 7.4**. To check compatibility with other releases, run **npm run test:e2e**
+(see section 9 of the [troubleshooting guide](docs/RISOLUZIONE-PROBLEMI.md#9-release-ibm-i-precedenti-alla-74), in Italian).
 
-| Tool | Descrizione |
+> **Language of the server.** Tool names are in English, but the server's tool descriptions, result field names
+> (for example `libreria`, `righe`, `elenco`), error messages, prompt names and prompt texts are in Italian,
+> as are the names of many tool parameters (`libreria`, `file`, `membro`, `percorso`, `daRiga`, ...).
+> Names are given exactly as the server exposes them in the tables below.
+> The troubleshooting guide is also available in Italian only.
+
+## Available tools
+
+| Tool | Description |
 |---|---|
-| `as400_system_info` | utente connesso, sistema, limiti attivi |
-| `as400_source_list` | file sorgente di una libreria / membri di un file sorgente |
-| `as400_source_read` | testo di un membro sorgente (RPG, CL, DDS, ...) |
-| `as400_source_search` | cerca un testo in tutti i membri sorgente di una libreria (righe trovate, con file/membro/riga) |
-| `as400_source_refs` | analisi statica di un membro RPG/CL/DDS: file, programmi chiamati, copy, data area, tabelle SQL, comandi, chiavi |
-| `as400_object_list` | oggetti di una libreria per tipo (*PGM, *SRVPGM, *CMD, *DTAARA, ...), con attributo e sorgente |
-| `as400_object_describe` | dettaglio di un oggetto: moduli e service program collegati, sorgente di origine, valore di una data area |
-| `as400_ifs_list` | directory IFS, anche in profondità (fino a 6 livelli) con filtro su nome e tipo |
-| `as400_ifs_stat` | tipo, dimensione, proprietario, CCSID e data di un file o directory |
-| `as400_ifs_read` | file di testo IFS; la finestra di righe è selezionata sul server |
-| `as400_ifs_read_binary` | hexdump di un file IFS a partire da un offset (binari, PDF, CCSID 65535) |
-| `as400_ifs_search` | ricerca di un testo nei file sotto una directory IFS |
-| `as400_sql_query` | SELECT read-only su PF/LF e viste QSYS2 |
-| `as400_file_desc` | descrizione PF/LF: campi, chiavi, tipo |
-| `as400_spool_list` | code di una libreria (con numero di file) o spool di una coda, più recenti per primi |
-| `as400_spool_search` | spool in tutte le code per utente, nome, job, USRDTA, stato, tipo, intervallo di date |
-| `as400_spool_info` | attributi completi di uno spool (pagine, copie, form type, font, overlay, ...) |
-| `as400_spool_read` | contenuto di uno spool (SCS, AFPDS, LINE, USERASCII) come testo, con `daPagina`/`aPagina` |
-| `as400_dds_describe` | struttura di PF/LF/DSPF/PRTF dal sorgente DDS: formati, campi, posizioni, chiavi, parole chiave |
+| `as400_system_info` | connected user, system, active limits |
+| `as400_source_list` | source files of a library / members of a source file |
+| `as400_source_read` | text of a source member (RPG, CL, DDS, ...) |
+| `as400_source_search` | search for text across all source members of a library (matching lines, with file/member/line) |
+| `as400_source_refs` | static analysis of an RPG/CL/DDS member: files, called programs, copy members, data areas, SQL tables, commands, keys |
+| `as400_object_list` | objects of a library by type (*PGM, *SRVPGM, *CMD, *DTAARA, ...), with attribute and source |
+| `as400_object_describe` | object detail: bound modules and service programs, source of origin, value of a data area |
+| `as400_ifs_list` | IFS directory, also in depth (up to 6 levels), with name and type filters |
+| `as400_ifs_stat` | type, size, owner, CCSID and date of a file or directory |
+| `as400_ifs_read` | IFS text file; the line window is selected on the server |
+| `as400_ifs_read_binary` | hexdump of an IFS file from a given offset (binaries, PDF, CCSID 65535) |
+| `as400_ifs_search` | search for text in the files under an IFS directory |
+| `as400_sql_query` | read-only SELECT on PF/LF and QSYS2 views |
+| `as400_file_desc` | PF/LF description: fields, keys, type |
+| `as400_schema_list` | libraries/schemas with description and owner |
+| `as400_table_list` | files of a library: PF/tables, LF, views, source files; filters on name, type and description |
+| `as400_column_search` | search fields by name (short/long) or by text in a library |
+| `as400_index_list` | DDS key of a file, plus the logicals/indexes/views built on it, with keys and record format |
+| `as400_where_used` | dependencies of a file: logicals, views, child foreign keys, triggers |
+| `as400_view_def` | SQL definition of a view |
+| `as400_constraints` | primary keys, unique, check and foreign key constraints |
+| `as400_routine_list` | SQL/external procedures and functions of a library |
+| `as400_spool_list` | queues of a library (with file counts) or spooled files of a queue, newest first |
+| `as400_spool_search` | spooled files across all queues by user, name, job, USRDTA, status, type, date range |
+| `as400_spool_info` | full attributes of a spooled file (pages, copies, form type, fonts, overlays, ...) |
+| `as400_spool_read` | content of a spooled file (SCS, AFPDS, LINE, USERASCII) as text, with `daPagina`/`aPagina` (from page / to page) |
+| `as400_dds_describe` | structure of PF/LF/DSPF/PRTF from the DDS source: formats, fields, positions, keys, keywords |
 
-## Risorse MCP
+## MCP resources
 
-Oltre ai tool, il server espone risorse che il client può allegare al contesto (con completamento di libreria, file e membro):
+Besides tools, the server exposes resources that the client can attach to the context (with completion of library, file and member):
 
-| URI | Contenuto |
+| URI | Content |
 |---|---|
-| `as400://sistema` | utente, versione IBM i e limiti attivi (JSON) |
-| `as400://source/{lib}/{file}/{member}` | testo di un membro sorgente, con le colonne originali |
-| `as400://file/{lib}/{name}` | descrizione JSON di un file (campi, tipi, chiave DDS) |
-| `as400://ifs/{percorso}` | file di testo IFS, es. `as400://ifs/home/profilo/script.sh` |
-| `as400://spool/{lib}/{outq}/{file}/{numero}` | contenuto testuale di un file di spool |
+| `as400://sistema` | user, IBM i version and active limits (JSON) |
+| `as400://source/{lib}/{file}/{member}` | text of a source member, with the original columns |
+| `as400://file/{lib}/{name}` | JSON description of a file (fields, types, DDS key) |
+| `as400://ifs/{path}` | IFS text file, e.g. `as400://ifs/home/profile/script.sh` |
+| `as400://spool/{lib}/{outq}/{file}/{number}` | text content of a spooled file |
 
-Le risorse usano la stessa logica dei tool: valgono `ALLOWED_LIBS`, `IFS_ALLOWED_PREFIXES`, i limiti e l'audit.
+Resources use the same logic as the tools, so `ALLOWED_LIBS`, `IFS_ALLOWED_PREFIXES`, the limits and the audit all apply.
 
-## Prompt MCP
+## MCP prompts
 
-| Prompt | Cosa chiede al modello |
+| Prompt | What it asks the model to do |
 |---|---|
-| `spiega_programma` | leggere un sorgente RPG/CL, analizzarne i riferimenti e spiegarne scopo, flusso e anomalie |
-| `documenta_libreria` | produrre un documento Markdown con programmi, file e dipendenze di una libreria |
-| `analizza_file` | spiegare un file: campi, chiavi, logici, vincoli, dati di esempio, chi lo usa |
-| `dove_e_usato` | trovare gli usi di un file, campo, programma o data area |
-| `analizza_spool` | trovare e leggere spool e joblog, riassumere gli errori |
-| `interroga_dati` | rispondere a una domanda sui dati: trovare file e campi giusti, scrivere una SELECT di sola lettura, eseguirla e riportare risposta, query e assunzioni |
-| `spiega_stampa` | descrivere il layout di un PRTF/DSPF e confrontarlo con gli spool reali |
+| `spiega_programma` | read an RPG/CL source, analyze its references and explain purpose, flow and anomalies |
+| `documenta_libreria` | produce a Markdown document with the programs, files and dependencies of a library |
+| `analizza_file` | explain a file: fields, keys, logicals, constraints, sample data, who uses it |
+| `dove_e_usato` | find where a file, field, program or data area is used |
+| `analizza_spool` | find and read spooled files and joblogs, and summarize the errors |
+| `interroga_dati` | answer a question about the data: find the right files and fields, write a read-only SELECT, run it and report the answer, the query and the assumptions |
+| `spiega_stampa` | describe the layout of a PRTF/DSPF and compare it with real spooled files |
 
-## Configurazione
+## Configuration
 
 ```bash
 cp .env.example .env
-chmod 600 .env          # le credenziali restano locali
-# compila AS400_HOST / AS400_USER / AS400_PASSWORD
+chmod 600 .env          # credentials stay local
+# fill in AS400_HOST / AS400_USER / AS400_PASSWORD
 ```
 
-Variabili opzionali: `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
-`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset ASCII del testo degli spool dopo la conversione, default `cp850`), `SPOOL_WSCST` (oggetto WSCST per la conversione, default `/QSYS.LIB/QWPDEFAULT.WSCST`), `SPOOL_MAX_READ_BYTES`, `ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `SEARCH_TIMEOUT_MS`, `SEARCH_MAX_MEMBERS`, `IFS_BINARY_MAX_BYTES`, `IFS_SEARCH_MAX_FILES`, `AUDIT_LOG`, `ALLOWED_LIBS` (lista librerie
-consentite), `IFS_ALLOWED_PREFIXES` (prefissi percorso IFS consentiti), `AS400_JDBC_EXTRA`
-(extraproperties JDBC in formato `chiave=valore&chiave=valore`).
+Optional variables: `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
+`SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`,
+`SPOOL_CHARSET` (ASCII charset of the spool text after conversion, default `cp850`),
+`SPOOL_WSCST` (WSCST object used for the conversion, default `/QSYS.LIB/QWPDEFAULT.WSCST`), `SPOOL_MAX_READ_BYTES`,
+`ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `SEARCH_TIMEOUT_MS`, `SEARCH_MAX_MEMBERS`, `IFS_BINARY_MAX_BYTES`,
+`IFS_SEARCH_MAX_FILES`, `AUDIT_LOG`, `ALLOWED_LIBS` (list of allowed libraries),
+`IFS_ALLOWED_PREFIXES` (allowed IFS path prefixes), `AS400_JDBC_EXTRA`
+(extra JDBC properties in `key=value&key=value` format).
 
-## Build e test connessione
+## Build and connection test
 
 ```bash
-npm install     # richiede build-essential (make/gcc) per compilare il bridge java
+npm install     # needs build-essential (make/gcc) to compile the java bridge
 npm run build
 npm run test:connection
-npm test            # test unitari (non richiedono connessione)
+npm test            # unit tests (no connection needed)
 npm run typecheck
-npm run test:e2e    # avvia il server e lo prova con un client MCP (richiede la connessione all'IBM i)
+npm run test:e2e    # starts the server and exercises it with an MCP client (needs the IBM i connection)
 ```
 
-## Integrazione con i client MCP
+## Integrating with MCP clients
 
-Il server parla MCP su stdio, quindi funziona con qualunque client che sappia avviare un processo locale.
-In tutti gli esempi `<path-to-inst-folder>` è la cartella in cui hai installato il progetto.
+The server speaks MCP over stdio, so it works with any client that can launch a local process.
+In all examples `<path-to-inst-folder>` is the folder where you installed the project.
 
-**Prima di collegare un client:**
+**Before connecting a client:**
 
-1. `npm install` e `npm run build` (i client avviano `dist/index.js`, che va ricompilato dopo ogni modifica al codice);
-2. crea e compila il `.env` come descritto in [Configurazione](#configurazione);
-3. verifica la connessione con `npm run test:connection`.
+1. `npm install` and `npm run build` (clients launch `dist/index.js`, which must be rebuilt after every code change);
+2. create and fill in the `.env` as described in [Configuration](#configuration);
+3. check the connection with `npm run test:connection`.
 
-**Credenziali.** Vengono lette dal `.env` nella cartella del progetto (accanto a `package.json`), indipendentemente dalla
-directory da cui il client avvia il server; se non c'è, dal `.env` della directory corrente. Le variabili già presenti
-nell'ambiente hanno la precedenza. Non serve quindi passare password al client, né scriverle nelle sue configurazioni.
+**Credentials.** They are read from the `.env` in the project folder (next to `package.json`), regardless of the
+directory the client launches the server from; if it is not there, from the `.env` in the current directory. Variables
+already present in the environment take precedence. So you never need to pass passwords to the client or write them
+in its configuration.
 
-**Percorso di `node`.** Se Node è installato con `nvm`/`fnm`, il client potrebbe non vedere la stessa versione della tua shell:
-in quel caso metti nei comandi il percorso assoluto del binario (`command -v node`) al posto di `node`. Serve Node >= 22.
+**Path to `node`.** If Node is installed with `nvm`/`fnm`, the client may not see the same version as your shell:
+in that case use the absolute path of the binary (`command -v node`) instead of `node` in the commands. Node >= 22 is required.
 
 ### Claude Code
 
@@ -107,7 +129,7 @@ claude mcp add as400 -- node <path-to-inst-folder>/my-mcp-as400/dist/index.js
 claude mcp list
 ```
 
-oppure in `.mcp.json` del progetto:
+or in the project's `.mcp.json`:
 
 ```json
 {
@@ -122,14 +144,14 @@ oppure in `.mcp.json` del progetto:
 
 ### Codex
 
-Codex CLI legge i server MCP da `~/.codex/config.toml`. Per attivarlo:
+Codex CLI reads MCP servers from `~/.codex/config.toml`. To enable it:
 
 ```bash
 codex mcp add as400 -- node <path-to-inst-folder>/my-mcp-as400/dist/index.js
 codex mcp list
 ```
 
-oppure, a mano, in `~/.codex/config.toml`:
+or, by hand, in `~/.codex/config.toml`:
 
 ```toml
 [mcp_servers.as400]
@@ -139,25 +161,25 @@ startup_timeout_sec = 30
 tool_timeout_sec = 300
 ```
 
-`tool_timeout_sec` è il tempo massimo per una singola chiamata a un tool. Alcune operazioni del server (`as400_source_search`,
-`as400_ifs_search`, letture di librerie molto grandi) possono durare più di un minuto, e il server ha un proprio limite di
-180 secondi (`SEARCH_TIMEOUT_MS`): tieni `tool_timeout_sec` almeno a quel valore, altrimenti Codex interrompe la chiamata prima.
+`tool_timeout_sec` is the maximum time for a single tool call. Some server operations (`as400_source_search`,
+`as400_ifs_search`, reads on very large libraries) can take more than a minute, and the server has its own limit of
+180 seconds (`SEARCH_TIMEOUT_MS`): keep `tool_timeout_sec` at least at that value, otherwise Codex interrupts the call first.
 
 ### OpenCode
 
-Il modo più semplice è il comando di OpenCode, che scrive la configurazione al posto tuo:
+The easiest way is OpenCode's own command, which writes the configuration for you:
 
 ```bash
-# solo per il progetto corrente (scrive opencode.json nella cartella)
+# current project only (writes opencode.json in the folder)
 opencode mcp add as400 -- node <path-to-inst-folder>/my-mcp-as400/dist/index.js
 
-# per tutti i progetti (configurazione globale)
+# all projects (global configuration)
 opencode mcp add --global as400 -- node <path-to-inst-folder>/my-mcp-as400/dist/index.js
 
 opencode mcp list
 ```
 
-Con OpenCode 2.2.0 il comando produce questa voce:
+With OpenCode 2.2.0 the command produces this entry:
 
 ```json
 {
@@ -172,63 +194,63 @@ Con OpenCode 2.2.0 il comando produce questa voce:
 }
 ```
 
-Alcune guide mostrano un formato diverso (`"mcp": { "as400": { "type": "local", "command": [...] } }`, senza il livello
-`servers`). Se modifichi il file a mano, usa il formato scritto dal comando `opencode mcp add` della *tua* versione.
+Some guides show a different format (`"mcp": { "as400": { "type": "local", "command": [...] } }`, without the `servers`
+level). If you edit the file by hand, use the format written by the `opencode mcp add` command of *your* version.
 
-### Cosa funziona con ciascun client
+### What works with each client
 
-- **Tool (27).** Sono la parte standard di MCP e quella che ogni client deve supportare.
-- **Risorse e prompt.** Il loro supporto dipende dal client. Se il tuo non li mostra, non manca nessuna funzione: ogni
-  risorsa ha un tool equivalente.
+- **Tools (27).** They are the standard part of MCP, and the one every client must support.
+- **Resources and prompts.** Support depends on the client. If yours does not show them, no functionality is lost:
+  every resource has an equivalent tool.
 
-  | Risorsa | Tool equivalente |
+  | Resource | Equivalent tool |
   |---|---|
   | `as400://sistema` | `as400_system_info` |
   | `as400://source/{lib}/{file}/{member}` | `as400_source_read` |
   | `as400://file/{lib}/{name}` | `as400_file_desc` |
-  | `as400://ifs/{percorso}` | `as400_ifs_read` |
-  | `as400://spool/{lib}/{outq}/{file}/{numero}` | `as400_spool_read` |
+  | `as400://ifs/{path}` | `as400_ifs_read` |
+  | `as400://spool/{lib}/{outq}/{file}/{number}` | `as400_spool_read` |
 
-  I prompt sono istruzioni di lavoro riusabili (quali tool chiamare e in che ordine): senza supporto ai prompt puoi scrivere
-  la stessa richiesta a mano.
+  Prompts are reusable work instructions (which tools to call and in what order): without prompt support you can type
+  the same request by hand.
 
-**Stato della verifica.** Il protocollo (tool, risorse, completamenti, prompt) è verificato con un client MCP di prova
-(`npm run test:e2e`, basato sull'SDK ufficiale), avviando il server da una directory diversa da quella del progetto.
-La sintassi di configurazione di Codex 0.167.0 è stata verificata con il suo stesso comando `codex mcp list`.
-Il collegamento con ciascun client reale, con un modello che chiama i tool, non è stato provato; per OpenCode non è stato
-possibile confermare come il comando `list` legga la voce scritta da `add`. Se qualcosa non funziona vedi la
-[guida ai problemi](docs/RISOLUZIONE-PROBLEMI.md#3-il-server-non-compare-o-non-risponde-nel-client-mcp).
+**Verification status.** The protocol (tools, resources, completions, prompts) is verified with a test MCP client
+(`npm run test:e2e`, based on the official SDK), launching the server from a directory other than the project's.
+Codex 0.167.0's configuration syntax was verified with its own `codex mcp list` command.
+The connection with each real client, with a model calling the tools, has not been tried; for OpenCode it was not
+possible to confirm how its `list` command reads the entry written by `add`. If something does not work, see the
+[troubleshooting guide](docs/RISOLUZIONE-PROBLEMI.md#3-il-server-non-compare-o-non-risponde-nel-client-mcp) (in Italian).
 
-## Problemi
+## Troubleshooting
 
-Per installazione, connessione, autorità, messaggi di errore dei tool, caratteri sbagliati, lentezza e compatibilità con la 7.3
-vedi la [guida alla risoluzione dei problemi](docs/RISOLUZIONE-PROBLEMI.md).
+For installation, connection, authorities, tool error messages, wrong characters, slowness and compatibility with 7.3,
+see the [troubleshooting guide](docs/RISOLUZIONE-PROBLEMI.md) (in Italian).
 
-## Note di sicurezza
+## Security notes
 
-Difesa a strati:
+Layered defense:
 
-1. **Connessione JDBC `access=read only`**: il server IBM i rifiuta ogni scrittura (verificato: `CREATE`, `CALL`).
-2. **Guardia SQL lessicale** (`src/sqlguard.ts`): tokenizza la query ignorando commenti e stringhe, ammette
-   solo `SELECT`/`WITH`, vieta DML/DDL/`CALL`, `FINAL TABLE`, `QCMDEXC`, e le funzioni IFS/spool
-   (`IFS_READ`, `SPOOLED_FILE_DATA`, ...) che hanno tool dedicati con i propri controlli.
-3. **`ALLOWED_LIBS` sulla SQL**: ogni tabella in `FROM`/`JOIN` deve essere qualificata (`LIB.TABELLA`) con una
-   libreria consentita; i cataloghi `QSYS2`, `SYSIBM`, `SYSIBMADM`, `SYSTOOLS` restano leggibili (solo metadati).
-4. **Limiti**: righe, caratteri, timeout (`SQL_TIMEOUT_MS`).
-5. **Audit**: ogni chiamata è registrata come JSON su stderr e, se `AUDIT_LOG` è impostato, su file
-   (i parametri SQL non vengono registrati).
+1. **JDBC connection with `access=read only`**: the IBM i server rejects every write (verified: `CREATE`, `CALL`).
+2. **Lexical SQL guard** (`src/sqlguard.ts`): tokenizes the query ignoring comments and strings, allows only
+   `SELECT`/`WITH`, forbids DML/DDL/`CALL`, `FINAL TABLE`, `QCMDEXC`, and the IFS/spool functions
+   (`IFS_READ`, `SPOOLED_FILE_DATA`, ...) that have dedicated tools with their own checks.
+3. **`ALLOWED_LIBS` on SQL**: every table in `FROM`/`JOIN` must be qualified (`LIB.TABLE`) with an allowed
+   library; the `QSYS2`, `SYSIBM`, `SYSIBMADM`, `SYSTOOLS` catalogs stay readable (metadata only).
+4. **Limits**: rows, characters, timeouts (`SQL_TIMEOUT_MS`).
+5. **Audit**: every call is logged as JSON on stderr and, if `AUDIT_LOG` is set, to a file
+   (SQL parameters are not logged).
 
-Il solo punto che usa una connessione non read-only è `as400_source_read` (alias temporaneo in QTEMP),
-con istruzioni fisse e nomi validati.
+The only place that uses a non-read-only connection is `as400_source_read` (a temporary alias in QTEMP),
+with fixed statements and validated names.
 
-Con `IFS_ALLOWED_PREFIXES` attivo i **collegamenti simbolici non vengono seguiti**: prima di leggere, il server
-verifica che nessun componente del percorso, dal prefisso consentito in giù, sia un `*SYMLNK`
-(un link dentro l'area consentita potrebbe puntare fuori). Nei risultati i link sono omessi.
-La ricerca IFS non opera nei file system speciali (`/QSYS.LIB`, `/QDLS`, ...).
+With `IFS_ALLOWED_PREFIXES` active, **symbolic links are not followed**: before reading, the server
+checks that no component of the path, from the allowed prefix downwards, is a `*SYMLNK`
+(a link inside the allowed area could point outside it). Links are omitted from results.
+IFS search does not work in the special file systems (`/QSYS.LIB`, `/QDLS`, ...).
 
-Altre misure:
+Other measures:
 
-- Server **solo lettura**: la `as400_sql_query` accetta solo `SELECT`/`WITH`, rifiuta
-  statement multipli e `FOR UPDATE`; nessun tool di scrittura o esecuzione CL.
-- L'accesso può essere ristretto con `ALLOWED_LIBS` e `IFS_ALLOWED_PREFIXES`.
-- Consigliato un profilo IBM i dedicato con autorità minime di lettura.
+- **Read-only** server: `as400_sql_query` accepts only `SELECT`/`WITH` and rejects
+  multiple statements and `FOR UPDATE`; there is no write tool and no CL execution tool.
+- Access can be restricted with `ALLOWED_LIBS` and `IFS_ALLOWED_PREFIXES`.
+- A dedicated IBM i profile with minimum read authorities is recommended.

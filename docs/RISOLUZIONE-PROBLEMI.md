@@ -1,6 +1,6 @@
 # Risoluzione dei problemi
 
-Guida ai problemi più comuni di `my-mcp-as400`. Torna al [README](../README.md).
+Guida ai problemi più comuni di `my-mcp-as400`. Torna al [README](../README.it.md).
 
 Le soluzioni qui sotto vengono da casi incontrati durante lo sviluppo, verificati su un IBM i V7R4. Dove una cosa non è stata
 provata su altre release (in particolare la 7.3) è detto esplicitamente.
@@ -86,7 +86,7 @@ e `scripts/e2e.ts`. Il server gestisce da solo `SIGINT`/`SIGTERM` chiudendo i po
 
 ## 3. Il server non compare o non risponde nel client MCP
 
-Vale per Claude Code, Codex e OpenCode (le istruzioni di attivazione sono nel [README](../README.md#integrazione-con-i-client-mcp)).
+Vale per Claude Code, Codex e OpenCode (le istruzioni di attivazione sono nel [README](../README.it.md#integrazione-con-i-client-mcp)).
 Per vedere lo stato del server registrato:
 
 ```bash
