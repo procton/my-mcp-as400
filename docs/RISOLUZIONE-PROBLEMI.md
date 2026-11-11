@@ -9,7 +9,7 @@ provata su altre release (in particolare la 7.3) è detto esplicitamente.
 
 1. [Da dove cominciare](#1-da-dove-cominciare)
 2. [Installazione e avvio](#2-installazione-e-avvio)
-3. [Il server non compare o non risponde in Claude Code](#3-il-server-non-compare-o-non-risponde-in-claude-code)
+3. [Il server non compare o non risponde nel client MCP](#3-il-server-non-compare-o-non-risponde-nel-client-mcp)
 4. [Connessione e credenziali](#4-connessione-e-credenziali)
 5. [Autorità e "non trovato"](#5-autorità-e-non-trovato)
 6. [Messaggi di errore dei tool](#6-messaggi-di-errore-dei-tool)
@@ -84,28 +84,36 @@ e `scripts/e2e.ts`. Il server gestisce da solo `SIGINT`/`SIGTERM` chiudendo i po
 
 ---
 
-## 3. Il server non compare o non risponde in Claude Code
+## 3. Il server non compare o non risponde nel client MCP
 
-Registra il server con il percorso **assoluto** del file compilato:
+Vale per Claude Code, Codex e OpenCode (le istruzioni di attivazione sono nel [README](../README.md#integrazione-con-i-client-mcp)).
+Per vedere lo stato del server registrato:
 
 ```bash
-npm run build
-claude mcp add as400 -- node /percorso/assoluto/my-mcp-as400/dist/index.js
-claude mcp list
+claude mcp list      # Claude Code
+codex mcp list       # Codex
+opencode mcp list    # OpenCode
 ```
 
-Controlla in ordine:
+Registra il server con il percorso **assoluto** del file compilato, e controlla in ordine:
 
 - **`dist/` non esiste o è vecchio.** Il server usa `dist/index.js`: dopo ogni modifica al codice serve `npm run build`.
-- **`node` non è quello giusto.** Con `nvm`/`fnm` il `node` visto da Claude Code può non essere Node 22. Usa il percorso assoluto
-  del binario (`which node`) al posto di `node` nel comando.
+- **`node` non è quello giusto.** Con `nvm`/`fnm` il `node` visto dal client può non essere Node 22. Usa il percorso assoluto
+  del binario (`command -v node`) al posto di `node` nel comando.
 - **Il `.env` non viene trovato.** Con la versione attuale non dipende dalla directory di avvio (vedi sezione 2). Se hai una versione
   precedente, aggiorna: usava solo la directory corrente.
 - **Qualcosa scrive su `stdout`.** Rompe il protocollo MCP (sintomo: il server si avvia ma i tool non rispondono o la connessione
   cade). Il server non scrive nulla su `stdout`; se aggiungi un `console.log` usa `console.error`.
 - **Primo avvio lento.** L'avvio della JVM e la prima connessione richiedono 2-3 secondi: la prima chiamata è più lenta delle successive.
+  In Codex puoi alzare `startup_timeout_sec` se il client dichiara il server non avviato.
+- **Le ricerche vengono interrotte dal client.** Codex ha un timeout per chiamata (`tool_timeout_sec` in `config.toml`): se è più
+  breve del tempo che serve a `as400_source_search` o `as400_ifs_search` (fino a `SEARCH_TIMEOUT_MS`, 180 s di default), la chiamata
+  fallisce lato client anche se il server stava lavorando. Alza `tool_timeout_sec` o restringi la ricerca (sezione 8).
+- **Il client non mostra risorse o prompt.** Il loro supporto dipende dal client; i tool coprono le stesse funzioni (tabella nel README).
+- **OpenCode: la voce non compare in `opencode mcp list`.** Controlla il file scritto da `opencode mcp add` (`opencode.json` nel
+  progetto, oppure la configurazione globale con `--global`) e che il formato sia quello scritto dal comando della tua versione.
 
-Per provare il server a mano, senza Claude Code, usa `npm run test:e2e`.
+Per provare il server a mano, senza nessun client, usa `npm run test:e2e`.
 
 ---
 

@@ -1,7 +1,9 @@
 # my-mcp-as400
 
-Server MCP (stdio) **read-only** per collegare Claude Code a un sistema IBM i (AS/400):
+Server MCP (stdio) **read-only** per collegare un assistente AI a un sistema IBM i (AS/400):
 sorgenti (RPG/CL/DDS), IFS, file fisici/logici via SQL, code di stampa.
+Si collega a qualunque client MCP su stdio; sono documentati [Claude Code](#claude-code),
+[Codex](#codex) e [OpenCode](#opencode).
 
 Basato su `node-jt400` (JDBC JT400 via bridge Java): richiede **Node >= 22** e **un JDK/JRE Java**.
 
@@ -78,10 +80,29 @@ npm run typecheck
 npm run test:e2e    # avvia il server e lo prova con un client MCP (richiede la connessione all'IBM i)
 ```
 
-## Integrazione con Claude Code
+## Integrazione con i client MCP
+
+Il server parla MCP su stdio, quindi funziona con qualunque client che sappia avviare un processo locale.
+In tutti gli esempi `<path-to-inst-folder>` è la cartella in cui hai installato il progetto.
+
+**Prima di collegare un client:**
+
+1. `npm install` e `npm run build` (i client avviano `dist/index.js`, che va ricompilato dopo ogni modifica al codice);
+2. crea e compila il `.env` come descritto in [Configurazione](#configurazione);
+3. verifica la connessione con `npm run test:connection`.
+
+**Credenziali.** Vengono lette dal `.env` nella cartella del progetto (accanto a `package.json`), indipendentemente dalla
+directory da cui il client avvia il server; se non c'è, dal `.env` della directory corrente. Le variabili già presenti
+nell'ambiente hanno la precedenza. Non serve quindi passare password al client, né scriverle nelle sue configurazioni.
+
+**Percorso di `node`.** Se Node è installato con `nvm`/`fnm`, il client potrebbe non vedere la stessa versione della tua shell:
+in quel caso metti nei comandi il percorso assoluto del binario (`command -v node`) al posto di `node`. Serve Node >= 22.
+
+### Claude Code
 
 ```bash
 claude mcp add as400 -- node <path-to-inst-folder>/my-mcp-as400/dist/index.js
+claude mcp list
 ```
 
 oppure in `.mcp.json` del progetto:
@@ -97,7 +118,84 @@ oppure in `.mcp.json` del progetto:
 }
 ```
 
-Le credenziali vengono lette dal `.env` nella cartella del progetto (accanto a `package.json`), indipendentemente dalla directory da cui Claude Code avvia il server; se non c'è, dal `.env` della directory corrente. Le variabili già presenti nell'ambiente hanno la precedenza.
+### Codex
+
+Codex CLI legge i server MCP da `~/.codex/config.toml`. Per attivarlo:
+
+```bash
+codex mcp add as400 -- node <path-to-inst-folder>/my-mcp-as400/dist/index.js
+codex mcp list
+```
+
+oppure, a mano, in `~/.codex/config.toml`:
+
+```toml
+[mcp_servers.as400]
+command = "node"
+args = ["<path-to-inst-folder>/my-mcp-as400/dist/index.js"]
+startup_timeout_sec = 30
+tool_timeout_sec = 300
+```
+
+`tool_timeout_sec` è il tempo massimo per una singola chiamata a un tool. Alcune operazioni del server (`as400_source_search`,
+`as400_ifs_search`, letture di librerie molto grandi) possono durare più di un minuto, e il server ha un proprio limite di
+180 secondi (`SEARCH_TIMEOUT_MS`): tieni `tool_timeout_sec` almeno a quel valore, altrimenti Codex interrompe la chiamata prima.
+
+### OpenCode
+
+Il modo più semplice è il comando di OpenCode, che scrive la configurazione al posto tuo:
+
+```bash
+# solo per il progetto corrente (scrive opencode.json nella cartella)
+opencode mcp add as400 -- node <path-to-inst-folder>/my-mcp-as400/dist/index.js
+
+# per tutti i progetti (configurazione globale)
+opencode mcp add --global as400 -- node <path-to-inst-folder>/my-mcp-as400/dist/index.js
+
+opencode mcp list
+```
+
+Con OpenCode 2.2.0 il comando produce questa voce:
+
+```json
+{
+  "mcp": {
+    "servers": {
+      "as400": {
+        "type": "local",
+        "command": ["node", "<path-to-inst-folder>/my-mcp-as400/dist/index.js"]
+      }
+    }
+  }
+}
+```
+
+Alcune guide mostrano un formato diverso (`"mcp": { "as400": { "type": "local", "command": [...] } }`, senza il livello
+`servers`). Se modifichi il file a mano, usa il formato scritto dal comando `opencode mcp add` della *tua* versione.
+
+### Cosa funziona con ciascun client
+
+- **Tool (27).** Sono la parte standard di MCP e quella che ogni client deve supportare.
+- **Risorse e prompt.** Il loro supporto dipende dal client. Se il tuo non li mostra, non manca nessuna funzione: ogni
+  risorsa ha un tool equivalente.
+
+  | Risorsa | Tool equivalente |
+  |---|---|
+  | `as400://sistema` | `as400_system_info` |
+  | `as400://source/{lib}/{file}/{member}` | `as400_source_read` |
+  | `as400://file/{lib}/{name}` | `as400_file_desc` |
+  | `as400://ifs/{percorso}` | `as400_ifs_read` |
+  | `as400://spool/{lib}/{outq}/{file}/{numero}` | `as400_spool_read` |
+
+  I prompt sono istruzioni di lavoro riusabili (quali tool chiamare e in che ordine): senza supporto ai prompt puoi scrivere
+  la stessa richiesta a mano.
+
+**Stato della verifica.** Il protocollo (tool, risorse, completamenti, prompt) è verificato con un client MCP di prova
+(`npm run test:e2e`, basato sull'SDK ufficiale), avviando il server da una directory diversa da quella del progetto.
+La sintassi di configurazione di Codex 0.167.0 è stata verificata con il suo stesso comando `codex mcp list`.
+Il collegamento con ciascun client reale, con un modello che chiama i tool, non è stato provato; per OpenCode non è stato
+possibile confermare come il comando `list` legga la voce scritta da `add`. Se qualcosa non funziona vedi la
+[guida ai problemi](docs/RISOLUZIONE-PROBLEMI.md#3-il-server-non-compare-o-non-risponde-nel-client-mcp).
 
 ## Problemi
 
