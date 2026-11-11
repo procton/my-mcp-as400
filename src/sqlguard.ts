@@ -1,6 +1,7 @@
 /* Guardia SQL per il tool as400_sql_query.
  * Difesa a strati: (1) questo controllo lessicale, (2) connessione JDBC `access=read only`
  * (il server rifiuta comunque ogni scrittura), (3) allow-list ALLOWED_LIBS sui riferimenti di tabella. */
+import { t as tr } from './i18n.js';
 
 interface Tok {
   /** 'w' parola, 'q' identificatore tra doppi apici, 's' stringa, 'p' punteggiatura */
@@ -38,7 +39,7 @@ export function tokenize(sql: string): Tok[] {
     }
     if (c === '/' && sql[i + 1] === '*') {
       const e = sql.indexOf('*/', i + 2);
-      if (e < 0) throw new Error('Commento SQL non terminato');
+      if (e < 0) throw new Error(tr({ it: 'Commento SQL non terminato', en: 'Unterminated SQL comment' }));
       i = e + 2;
       continue;
     }
@@ -47,7 +48,7 @@ export function tokenize(sql: string): Tok[] {
       i++;
       let val = '';
       for (;;) {
-        if (i >= n) throw new Error(c === "'" ? 'Stringa SQL non terminata' : 'Identificatore tra apici non terminato');
+        if (i >= n) throw new Error(c === "'" ? tr({ it: 'Stringa SQL non terminata', en: 'Unterminated SQL string' }) : tr({ it: 'Identificatore tra apici non terminato', en: 'Unterminated quoted identifier' }));
         if (sql[i] === c) {
           if (sql[i + 1] === c) { val += c; i += 2; continue; }
           i++;
@@ -87,10 +88,10 @@ const isWord = (t: Tok | undefined, ...vals: string[]): boolean =>
 
 export function guardReadOnlySql(query: string, opts: GuardOptions): GuardResult {
   const q = query.trim().replace(/;+\s*$/, '').trim();
-  if (!q) throw new Error('Query vuota');
+  if (!q) throw new Error(tr({ it: 'Query vuota', en: 'Empty query' }));
   const toks = tokenize(q);
-  if (toks.some((t) => t.t === 'p' && t.v === ';')) throw new Error('Un solo statement SQL, senza punto e virgola');
-  if (!isWord(toks[0], 'SELECT', 'WITH')) throw new Error('Ammesse solo istruzioni SELECT o WITH (server read-only)');
+  if (toks.some((t) => t.t === 'p' && t.v === ';')) throw new Error(tr({ it: 'Un solo statement SQL, senza punto e virgola', en: 'Only one SQL statement, without a semicolon' }));
+  if (!isWord(toks[0], 'SELECT', 'WITH')) throw new Error(tr({ it: 'Ammesse solo istruzioni SELECT o WITH (server read-only)', en: 'Only SELECT or WITH statements are allowed (read-only server)' }));
 
   // parole vietate / oggetti vietati (ignora le parole in stringhe e identificatori tra apici)
   for (let i = 0; i < toks.length; i++) {
@@ -98,20 +99,23 @@ export function guardReadOnlySql(query: string, opts: GuardOptions): GuardResult
     if (t.t !== 'w') continue;
     if (FORBIDDEN_WORDS.has(t.v)) {
       // CALL/SET ecc. non possono comparire in una SELECT lecita
-      throw new Error(`Parola chiave non consentita (server read-only): ${t.v}`);
+      throw new Error(tr({ it: 'Parola chiave non consentita (server read-only): {kw}', en: 'Keyword not allowed (read-only server): {kw}' }, { kw: t.v }));
     }
     if (FORBIDDEN_OBJECTS.has(t.v)) {
-      throw new Error(`Oggetto/funzione non consentita in sql_query: ${t.v} (per IFS e spool usa i tool dedicati)`);
+      throw new Error(tr({
+        it: 'Oggetto/funzione non consentita in sql_query: {obj} (per IFS e spool usa i tool dedicati)',
+        en: 'Object/function not allowed in sql_query: {obj} (use the dedicated tools for IFS and spool)',
+      }, { obj: t.v }));
     }
     if (t.v === 'FINAL' || t.v === 'OLD' || t.v === 'NEW') {
-      if (isWord(toks[i + 1], 'TABLE')) throw new Error('Riferimenti FINAL/OLD/NEW TABLE non consentiti');
+      if (isWord(toks[i + 1], 'TABLE')) throw new Error(tr({ it: 'Riferimenti FINAL/OLD/NEW TABLE non consentiti', en: 'FINAL/OLD/NEW TABLE references are not allowed' }));
     }
-    if (t.v === 'FOR' && isWord(toks[i + 1], 'UPDATE')) throw new Error('FOR UPDATE non consentito (server read-only)');
-    if (t.v === 'SKIP' && isWord(toks[i + 1], 'LOCKED')) throw new Error('SKIP LOCKED DATA non consentito');
+    if (t.v === 'FOR' && isWord(toks[i + 1], 'UPDATE')) throw new Error(tr({ it: 'FOR UPDATE non consentito (server read-only)', en: 'FOR UPDATE is not allowed (read-only server)' }));
+    if (t.v === 'SKIP' && isWord(toks[i + 1], 'LOCKED')) throw new Error(tr({ it: 'SKIP LOCKED DATA non consentito', en: 'SKIP LOCKED DATA is not allowed' }));
   }
   for (const t of toks) {
     if (t.t === 'q' && FORBIDDEN_OBJECTS.has(t.v.toUpperCase())) {
-      throw new Error(`Oggetto/funzione non consentita in sql_query: ${t.v}`);
+      throw new Error(tr({ it: 'Oggetto/funzione non consentita in sql_query: {obj}', en: 'Object/function not allowed in sql_query: {obj}' }, { obj: t.v }));
     }
   }
 
@@ -202,12 +206,13 @@ function checkRef(toks: Tok[], k: number, ok: Set<string>, ctes: Set<string>, is
   const b = toks[k + 2];
   if (sep && sep.t === 'p' && (sep.v === '.' || sep.v === '/') && b && (b.t === 'w' || b.t === 'q')) {
     const schema = a.v.toUpperCase();
-    if (!ok.has(schema)) throw new Error(`Libreria non consentita (ALLOWED_LIBS): ${schema}`);
+    if (!ok.has(schema)) throw new Error(tr({ it: 'Libreria non consentita (ALLOWED_LIBS): {schema}', en: 'Library not allowed (ALLOWED_LIBS): {schema}' }, { schema }));
     return k + 3;
   }
   const nm = a.v.toUpperCase();
   if (!isFunc && ctes.has(nm)) return k + 1;
-  throw new Error(
-    `Con ALLOWED_LIBS attivo ogni tabella/funzione va qualificata con la libreria (LIB.TABELLA): '${a.v}'`,
-  );
+  throw new Error(tr({
+    it: "Con ALLOWED_LIBS attivo ogni tabella/funzione va qualificata con la libreria (LIB.TABELLA): '{name}'",
+    en: "With ALLOWED_LIBS active every table/function must be qualified with its library (LIB.TABLE): '{name}'",
+  }, { name: a.v }));
 }

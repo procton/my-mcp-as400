@@ -4,23 +4,27 @@ import { getConfig, objName } from '../config.js';
 import { json, tool, pick } from './common.js';
 import type { ToolResult } from './common.js';
 import { nameCond } from './catalog.js';
+import { t, paramName } from '../i18n.js';
 
 /** Elenco di tipi oggetto IBM i (es. "*PGM *SRVPGM"): ogni voce validata. */
 function typeList(value: string | undefined): string {
   const raw = (value ?? '*ALL').trim().toUpperCase();
   const parts = raw.split(/[\s,]+/).filter(Boolean);
-  if (parts.length === 0 || parts.length > 20) throw new Error('Elenco tipi oggetto non valido');
-  for (const p of parts) if (!/^\*[A-Z0-9]{2,8}$/.test(p)) throw new Error(`Tipo oggetto non valido: '${p}' (es. *PGM, *SRVPGM, *CMD, *DTAARA)`);
+  if (parts.length === 0 || parts.length > 20) throw new Error(t({ it: 'Elenco tipi oggetto non valido', en: 'Invalid object type list' }));
+  for (const p of parts) if (!/^\*[A-Z0-9]{2,8}$/.test(p)) throw new Error(t({
+      it: "Tipo oggetto non valido: '{p}' (es. *PGM, *SRVPGM, *CMD, *DTAARA)",
+      en: "Invalid object type: '{p}' (e.g. *PGM, *SRVPGM, *CMD, *DTAARA)",
+    }, { p }));
   return parts.join(' ');
 }
 
 const inputList = {
-  libreria: z.string().describe('Libreria (max 10 caratteri)'),
-  tipo: z.string().optional().describe("Tipi oggetto separati da spazio o virgola, es. '*PGM *SRVPGM' (default *ALL)"),
-  filtro: z.string().optional().describe('Filtro nome (SQL LIKE: % e _)'),
-  testo: z.string().optional().describe('Sottostringa nella descrizione'),
-  attributo: z.string().optional().describe('Filtra per attributo/linguaggio (es. RPGLE, CLLE, PF)'),
-  limite: z.number().int().min(1).optional().describe('Massimo di oggetti (default 200, tetto SQL_MAX_ROWS)'),
+  libreria: z.string(),
+  tipo: z.string().optional(),
+  filtro: z.string().optional(),
+  testo: z.string().optional(),
+  attributo: z.string().optional(),
+  limite: z.number().int().min(1).optional(),
 };
 
 export const objectList = tool<z.infer<z.ZodObject<typeof inputList>>>('as400_object_list', async (args): Promise<ToolResult> => {
@@ -67,24 +71,27 @@ export const objectList = tool<z.infer<z.ZodObject<typeof inputList>>>('as400_ob
     };
   });
   const out: Record<string, unknown> = { libreria: lib, tipi, oggetti: elenco.length, elenco };
-  if (elenco.length >= lim) out.nota = `raggiunto il limite di ${lim}: restringi con filtro/tipo/testo o aumenta 'limite'`;
+  if (elenco.length >= lim) out.nota = t({
+    it: "raggiunto il limite di {n}: restringi con {filtro}/{tipo}/{testo} o aumenta '{limite}'",
+    en: "reached the limit of {n}: narrow with {filtro}/{tipo}/{testo} or raise '{limite}'",
+  }, { n: lim, filtro: paramName('filtro'), tipo: paramName('tipo'), testo: paramName('testo'), limite: paramName('limite') });
   return json(out);
 });
 
 const inputDescribe = {
-  libreria: z.string().describe('Libreria dell\'oggetto (max 10 caratteri)'),
-  oggetto: z.string().describe('Nome oggetto (max 10 caratteri)'),
-  tipo: z.string().describe("Tipo oggetto, es. '*PGM', '*SRVPGM', '*FILE', '*DTAARA', '*CMD'"),
+  libreria: z.string(),
+  oggetto: z.string(),
+  tipo: z.string(),
 };
 
 export const objectDescribe = tool<z.infer<z.ZodObject<typeof inputDescribe>>>('as400_object_describe', async (args): Promise<ToolResult> => {
   const lib = objName(args.libreria, 'libreria');
   const name = objName(args.oggetto, 'oggetto');
   const tipo = typeList(args.tipo);
-  if (tipo.includes(' ') || tipo === '*ALL') throw new Error('Indica un solo tipo oggetto specifico');
+  if (tipo.includes(' ') || tipo === '*ALL') throw new Error(t({ it: 'Indica un solo tipo oggetto specifico', en: 'Specify exactly one object type' }));
 
   const rows = await normalizedQuery(`SELECT * FROM TABLE(QSYS2.OBJECT_STATISTICS(?, ?, ?))`, [lib, tipo, name]);
-  if (rows.length === 0) throw new Error(`Oggetto non trovato: ${lib}/${name} ${tipo}`);
+  if (rows.length === 0) throw new Error(t({ it: 'Oggetto non trovato: {lib}/{name} {tipo}', en: 'Object not found: {lib}/{name} {tipo}' }, { lib, name, tipo }));
   const o = rows[0];
   const base: Record<string, unknown> = {
     oggetto: `${lib}/${name}`, tipo,
@@ -146,7 +153,10 @@ export const objectDescribe = tool<z.infer<z.ZodObject<typeof inputDescribe>>>('
       return r[0] ?? null;
     });
   } else if (tipo === '*FILE') {
-    base.suggerimento = 'Per campi, chiavi e logici usa as400_file_desc, as400_index_list e as400_where_used.';
+    base.suggerimento = t({
+      it: 'Per campi, chiavi e logici usa as400_file_desc, as400_index_list e as400_where_used.',
+      en: 'For fields, keys and logicals use as400_file_desc, as400_index_list and as400_where_used.',
+    });
   }
   return json(base);
 });

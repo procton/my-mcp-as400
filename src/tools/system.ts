@@ -1,5 +1,6 @@
 import { normalizedQuery } from '../pool.js';
 import { getConfig } from '../config.js';
+import { t } from '../i18n.js';
 import { json, tool, pick } from './common.js';
 import type { ToolResult } from './common.js';
 
@@ -28,8 +29,8 @@ export const systemInfo = tool<Record<string, never>>('as400_system_info', async
     source_max_righe: cfg.sourceMaxLines,
     ifs_max_righe: cfg.ifsMaxLines,
     spool_max_file: cfg.spoolMaxFiles,
-    librerie_consentite: cfg.allowedLibs ?? '*TUTTE',
-    prefissi_ifs_consentiti: cfg.ifsAllowedPrefixes ?? '*TUTTI',
+    librerie_consentite: cfg.allowedLibs ?? t({ it: '*TUTTE', en: '*ALL' }),
+    prefissi_ifs_consentiti: cfg.ifsAllowedPrefixes ?? t({ it: '*TUTTI', en: '*ALL' }),
   };
   return json({ connessione: base[0] ?? {}, sistema: env, limiti_attivi: limiti });
 });

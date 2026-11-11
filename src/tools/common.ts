@@ -1,5 +1,6 @@
 import { describeError } from '../pool.js';
 import { audit } from '../audit.js';
+import { localizeKeys, t, type Msg } from '../i18n.js';
 
 /** Risultato di un tool MCP (solo testo). */
 export interface ToolResult {
@@ -13,9 +14,15 @@ export function text(t: string): ToolResult {
   return { content: [{ type: 'text', text: t }] };
 }
 
-/** Serializza un valore come JSON leggibile. */
-export function json(value: unknown): ToolResult {
-  return text(typeof value === 'string' ? value : JSON.stringify(value, null, 2));
+/** Serializza un valore come JSON leggibile; le chiavi sono tradotte nella lingua scelta (LOCALE).
+ * `dati` contiene righe di tabelle dell'utente: le sue chiavi non si toccano. */
+export function json(value: unknown, opts: { rename?: Record<string, string> } = {}): ToolResult {
+  return text(typeof value === 'string' ? value : JSON.stringify(localizeKeys(value, { opaque: ['dati'], rename: opts.rename }), null, 2));
+}
+
+/** Riga di metadati JSON che precede il testo di alcuni tool (sorgenti, IFS, hexdump), con chiavi tradotte. */
+export function metaLine(meta: Record<string, unknown>): string {
+  return JSON.stringify(localizeKeys(meta));
 }
 
 export function error(err: unknown): ToolResult {
@@ -38,10 +45,26 @@ export function tool<A>(name: string, fn: (args: A) => Promise<ToolResult>): (ar
   };
 }
 
+/** Etichetta leggibile per il codice TABLE_TYPE di QSYS2.SYSTABLES. */
+export function tableTypeLabel(code: string): string | undefined {
+  const m: Record<string, Msg> = {
+    T: { it: 'tabella SQL', en: 'SQL table' },
+    P: { it: 'file fisico (PF)', en: 'physical file (PF)' },
+    L: { it: 'file logico (LF)', en: 'logical file (LF)' },
+    V: { it: 'vista', en: 'view' },
+    M: { it: 'MQT', en: 'MQT' },
+    A: { it: 'alias', en: 'alias' },
+  };
+  return m[code] ? t(m[code]) : undefined;
+}
+
 /** Tronca un testo oltre maxChars aggiungendo una nota. */
-export function capText(s: string, maxChars: number, what = 'testo'): string {
+export function capText(s: string, maxChars: number, what: Msg = { it: 'testo', en: 'text' }): string {
   if (s.length <= maxChars) return s;
-  return s.slice(0, maxChars) + `\n...[${what} troncato: ${s.length - maxChars} caratteri omessi; aumenta il limite o riduci l'intervallo]`;
+  return s.slice(0, maxChars) + '\n' + t({
+    it: "...[{what} troncato: {n} caratteri omessi; aumenta il limite o riduci l'intervallo]",
+    en: '...[{what} truncated: {n} characters omitted; raise the limit or narrow the range]',
+  }, { what: t(what), n: s.length - maxChars });
 }
 
 /** Converte un pattern LIKE SQL in RegExp JS (senza distinzione maiuscole/minuscole, come i nomi IBM i). */

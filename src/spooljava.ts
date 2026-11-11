@@ -8,6 +8,7 @@
 import { getConfig } from './config.js';
 import { describeError, getPool } from './pool.js';
 import { decodeBytes, normalizeSpoolText } from './charset.js';
+import { t } from './i18n.js';
 
 interface JavaApi {
   import: (cls: string) => any;
@@ -103,7 +104,10 @@ export async function readSpooledFile(key: SpoolKey, maxBytes: number): Promise<
   } catch (err) {
     const msg = describeError(err);
     if (/WSCST|workstation customi|CPF/i.test(msg)) {
-      throw new Error(`Conversione dello spool non riuscita (${msg.split('\n')[0]}). Verifica SPOOL_WSCST=${cfg.spoolWscst}`);
+      throw new Error(t({
+        it: 'Conversione dello spool non riuscita ({msg}). Verifica SPOOL_WSCST={wscst}',
+        en: 'Spool conversion failed ({msg}). Check SPOOL_WSCST={wscst}',
+      }, { msg: msg.split('\n')[0], wscst: cfg.spoolWscst }));
     }
     throw new Error(msg);
   } finally {

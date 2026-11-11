@@ -2,13 +2,14 @@ import { z } from 'zod';
 import { normalizedQuery } from '../pool.js';
 import { getConfig, objName } from '../config.js';
 import { guardReadOnlySql } from '../sqlguard.js';
-import { json, tool, pick } from './common.js';
+import { t } from '../i18n.js';
+import { json, tool, pick, tableTypeLabel } from './common.js';
 import type { ToolResult } from './common.js';
 
 const inputQuery = {
-  query: z.string().describe('Istruzione SQL di sola lettura (SELECT o WITH); un solo statement, senza punto e virgola'),
+  query: z.string(),
   parametri: z.array(z.union([z.string(), z.number(), z.null()])).optional()
-    .describe('Parametri per i marker ? (facoltativo)'),
+    ,
 };
 
 /** Valida una query read-only (guardia lessicale + allow-list) e applica il limite di righe. */
@@ -26,12 +27,13 @@ export const sqlQuery = tool<
   // difesa in profondità: anche con un FETCH FIRST esplicito dell'utente il tetto resta SQL_MAX_ROWS
   const troncato = rows.length > cfg.sqlMaxRows;
   if (troncato) rows = rows.slice(0, cfg.sqlMaxRows);
-  return json({ righe: rows.length, troncato: troncato || undefined, dati: rows });
+  // qui `righe` è il numero di righe restituite dalla query (altrove sono righe di sorgente)
+  return json({ righe: rows.length, troncato: troncato || undefined, dati: rows }, { rename: { righe: 'rows' } });
 });
 
 const inputDesc = {
-  libreria: z.string().describe('Libreria del file (max 10 caratteri)'),
-  file: z.string().describe('Nome del file fisico o logico (max 10 caratteri)'),
+  libreria: z.string(),
+  file: z.string(),
 };
 
 /** Descrive un file fisico/logico: oggetto, campi, chiavi, tipo. */
@@ -45,7 +47,7 @@ export const fileDesc = tool<
     `SELECT * FROM TABLE(QSYS2.OBJECT_STATISTICS(?, '*FILE', ?))`,
     [lib, file],
   );
-  if (objs.length === 0) throw new Error(`File non trovato: ${lib}/${file}`);
+  if (objs.length === 0) throw new Error(t({ it: 'File non trovato: {lib}/{file}', en: 'File not found: {lib}/{file}' }, { lib, file }));
   const obj = objs[0];
 
   const srcRows = await normalizedQuery(
@@ -54,7 +56,6 @@ export const fileDesc = tool<
   );
   const fileType = String(pick(srcRows[0] ?? {}, 'FILE_TYPE') ?? '');
   const tableType = String(pick(srcRows[0] ?? {}, 'TABLE_TYPE') ?? '');
-  const TIPI: Record<string, string> = { T: 'tabella SQL', P: 'file fisico (PF)', L: 'file logico (LF)', V: 'vista', M: 'MQT', A: 'alias' };
 
   const cols = await normalizedQuery(
     `SELECT SYSTEM_COLUMN_NAME AS CAMPO, ORDINAL_POSITION AS POS,
@@ -87,14 +88,19 @@ export const fileDesc = tool<
   return json({
     libreria: lib,
     file,
-    tipo: fileType === 'S' ? 'FILE SORGENTE (usa as400_source_list / as400_source_read)' : (TIPI[tableType] ?? tableType),
+    tipo: fileType === 'S'
+      ? t({ it: 'FILE SORGENTE (usa as400_source_list / as400_source_read)', en: 'SOURCE FILE (use as400_source_list / as400_source_read)' })
+      : (tableTypeLabel(tableType) ?? tableType),
     descrizione: pick(obj, 'OBJTEXT') ?? null,
     creato: pick(obj, 'OBJCREATED') ?? null,
     ultimo_uso: pick(obj, 'LAST_USED_TIMESTAMP') ?? null,
     campi: cols,
     chiave_dds: chiaveDds,
     vincoli_chiave: keys,
-    dettagli_oggetti: 'usa as400_index_list, as400_where_used, as400_constraints per logici, dipendenze e vincoli',
+    dettagli_oggetti: t({
+      it: 'usa as400_index_list, as400_where_used, as400_constraints per logici, dipendenze e vincoli',
+      en: 'use as400_index_list, as400_where_used, as400_constraints for logicals, dependencies and constraints',
+    }),
     esempio: `SELECT * FROM ${lib}.${file} FETCH FIRST 10 ROWS ONLY`,
   });
 });

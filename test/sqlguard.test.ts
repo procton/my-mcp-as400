@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { guardReadOnlySql } from '../src/sqlguard.js';
+import { setLocale } from '../src/i18n.js';
+
+setLocale('EN'); // deterministico: non dipende dal LOCALE del .env
 
 const g = (q: string, allowedLibs: string[] | null = null) => guardReadOnlySql(q, { allowedLibs, maxRows: 100 });
 
@@ -57,7 +60,7 @@ test('ALLOWED_LIBS: riferimenti qualificati', () => {
   assert.doesNotThrow(() => g('SELECT * FROM mylib.t a JOIN MYLIB.u b ON a.x = b.x', al));
   assert.doesNotThrow(() => g('SELECT * FROM qsys2.systables', al));
   assert.throws(() => g('SELECT * FROM other.t', al), /OTHER/);
-  assert.throws(() => g('SELECT * FROM t', al), /qualificata/);
+  assert.throws(() => g('SELECT * FROM t', al), /qualified/);
   assert.throws(() => g('SELECT * FROM mylib.t, other.u', al), /OTHER/);
   assert.throws(() => g('SELECT * FROM mylib.t a JOIN other.u b ON 1=1', al), /OTHER/);
   assert.throws(() => g('SELECT * FROM (SELECT * FROM other.t) x', al), /OTHER/);
@@ -71,4 +74,15 @@ test('ALLOWED_LIBS: CTE ammesse', () => {
   assert.doesNotThrow(() => g('WITH c AS (SELECT * FROM mylib.t) SELECT * FROM c', ['MYLIB']));
   assert.throws(() => g('WITH c AS (SELECT * FROM other.t) SELECT * FROM c', ['MYLIB']), /OTHER/);
   assert.doesNotThrow(() => g('WITH c AS (SELECT 1 AS A FROM mylib.t), d AS (SELECT * FROM c) SELECT * FROM d', ['MYLIB']));
+});
+
+test('i messaggi seguono la lingua scelta', () => {
+  assert.throws(() => g('DELETE FROM t'), /Only SELECT or WITH statements are allowed/);
+  setLocale('IT');
+  try {
+    assert.throws(() => g('DELETE FROM t'), /Ammesse solo istruzioni SELECT o WITH/);
+    assert.throws(() => g('SELECT * FROM t', ['MYLIB']), /qualificata/);
+  } finally {
+    setLocale('EN');
+  }
 });

@@ -1,17 +1,11 @@
-import { config as loadEnv } from 'dotenv';
-import { fileURLToPath } from 'node:url';
-import path from 'node:path';
-
-// Il .env si cerca prima nella cartella del progetto (accanto a src/ o dist/), poi nella directory corrente.
-// dotenv/config userebbe solo la directory corrente, che per un server avviato da Claude Code è il progetto
-// aperto dall'utente e non quello del server. Le variabili già presenti nell'ambiente non vengono sovrascritte.
-const serverDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-loadEnv({ path: path.join(serverDir, '.env'), quiet: true });
-loadEnv({ quiet: true });
+import './env.js';
+import { t, type Msg } from './i18n.js';
 
 function required(name: string): string {
   const v = process.env[name];
-  if (!v) throw new Error(`Variabile ambiente mancante: ${name} (vedi .env.example)`);
+  if (!v) {
+    throw new Error(t({ it: 'Variabile ambiente mancante: {name} (vedi .env.example)', en: 'Missing environment variable: {name} (see .env.example)' }, { name }));
+  }
   return v;
 }
 
@@ -19,7 +13,9 @@ function int(name: string, def: number): number {
   const v = process.env[name];
   if (!v) return def;
   const n = Number.parseInt(v, 10);
-  if (!Number.isFinite(n) || n <= 0) throw new Error(`${name} non è un intero positivo: ${v}`);
+  if (!Number.isFinite(n) || n <= 0) {
+    throw new Error(t({ it: '{name} non è un intero positivo: {v}', en: '{name} is not a positive integer: {v}' }, { name, v }));
+  }
   return n;
 }
 
@@ -116,13 +112,17 @@ export function getConfig(): Config {
 /** Normalizza e valida un percorso IFS assoluto (read-only, niente attraversamento). */
 export function ifsPath(value: string): string {
   let p = value.trim();
-  if (!p.startsWith('/')) throw new Error(`Percorso IFS non valido (deve essere assoluto): ${value}`);
-  if (p.includes('\0')) throw new Error('Percorso IFS non valido (carattere nullo)');
+  if (!p.startsWith('/')) {
+    throw new Error(t({ it: 'Percorso IFS non valido (deve essere assoluto): {value}', en: 'Invalid IFS path (must be absolute): {value}' }, { value }));
+  }
+  if (p.includes('\0')) throw new Error(t({ it: 'Percorso IFS non valido (carattere nullo)', en: 'Invalid IFS path (null character)' }));
   // normalizza: '//' , '/./' e '/' finale; '..' vietato
   const segs = p.split('/').filter((seg) => seg !== '' && seg !== '.');
-  if (segs.includes('..')) throw new Error(`Percorso IFS non valido (componente '..' vietata): ${value}`);
+  if (segs.includes('..')) {
+    throw new Error(t({ it: "Percorso IFS non valido (componente '..' vietata): {value}", en: "Invalid IFS path ('..' component not allowed): {value}" }, { value }));
+  }
   p = '/' + segs.join('/');
-  if (p.length > 32709) throw new Error(`Percorso IFS troppo lungo: ${value}`);
+  if (p.length > 32709) throw new Error(t({ it: 'Percorso IFS troppo lungo: {value}', en: 'IFS path too long: {value}' }, { value }));
   const cfg = cached?.ifsAllowedPrefixes;
   if (cfg && cfg.length) {
     // /QSYS.LIB è insensibile al maiuscolo/minuscolo, il resto no
@@ -133,20 +133,43 @@ export function ifsPath(value: string): string {
       const pre = prefix === '/' ? '' : norm(prefix);
       return norm(p) === pre || norm(p).startsWith(pre + '/');
     });
-    if (!okPrefix) throw new Error(`Percorso IFS non consentito (IFS_ALLOWED_PREFIXES=${cfg.join(',')}): ${p}`);
+    if (!okPrefix) {
+      throw new Error(t({
+        it: 'Percorso IFS non consentito (IFS_ALLOWED_PREFIXES={list}): {p}',
+        en: 'IFS path not allowed (IFS_ALLOWED_PREFIXES={list}): {p}',
+      }, { list: cfg.join(','), p }));
+    }
   }
   return p;
+}
+
+/** Etichetta mostrata per il tipo di nome. L'argomento `what` di objName resta il codice interno (italiano),
+ * perché serve anche a decidere se applicare ALLOWED_LIBS. */
+function whatLabel(what: string): string {
+  const labels: Record<string, Msg> = {
+    nome: { it: 'nome', en: 'name' },
+    libreria: { it: 'libreria', en: 'library' },
+    file: { it: 'file', en: 'file' },
+    membro: { it: 'membro', en: 'member' },
+    oggetto: { it: 'oggetto', en: 'object' },
+    'coda di stampa': { it: 'coda di stampa', en: 'output queue' },
+    'file di spool': { it: 'file di spool', en: 'spooled file' },
+  };
+  return labels[what] ? t(labels[what]) : what;
 }
 
 /** Normalizza e valida un nome oggetto IBM i (libreria/file/membro). */
 export function objName(value: string, what = 'nome'): string {
   const n = value.trim().toUpperCase();
   if (!/^[A-Z0-9_$#@]{1,10}$/.test(n)) {
-    throw new Error(`${what} non valido: '${value}' (max 10 caratteri [A-Z0-9_$#@])`);
+    throw new Error(t({
+      it: "{what} non valido: '{value}' (max 10 caratteri [A-Z0-9_$#@])",
+      en: "Invalid {what}: '{value}' (max 10 characters [A-Z0-9_$#@])",
+    }, { what: whatLabel(what), value }));
   }
   if (cached?.allowedLibs && what.startsWith('libreria')) {
     if (!cached.allowedLibs.includes(n)) {
-      throw new Error(`Libreria non consentita (ALLOWED_LIBS): ${n}`);
+      throw new Error(t({ it: 'Libreria non consentita (ALLOWED_LIBS): {n}', en: 'Library not allowed (ALLOWED_LIBS): {n}' }, { n }));
     }
   }
   return n;

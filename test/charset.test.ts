@@ -2,6 +2,9 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { decodeBytes, decodeCp850, normalizeSpoolText, splitPages } from '../src/charset.js';
 import { parseTimestamp } from '../src/spooljava.js';
+import { setLocale } from '../src/i18n.js';
+
+setLocale('EN'); // deterministico: non dipende dal LOCALE del .env
 
 test('CP850: accenti italiani e simboli', () => {
   // 0x8A è, 0xD4 È, 0x97 ù, 0x85 à, 0x95 ò, 0x8D ì, 0x80 Ç, 0x9C £

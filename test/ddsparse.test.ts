@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { parseDds, parseKeywords } from '../src/ddsparse.js';
+import { setLocale } from '../src/i18n.js';
+
+setLocale('EN'); // deterministico: non dipende dal LOCALE del .env
 
 /** Costruisce una riga DDS a colonne fisse. */
 function dds(o: { cond?: string; form?: string; name?: string; ref?: boolean; len?: string; type?: string; dec?: string; usage?: string; line?: string; pos?: string; kw?: string; comment?: boolean }): string {
@@ -103,5 +106,24 @@ test('PRTF: campi con riga/posizione e continuazione di parole chiave', () => {
 test('campi senza formato esplicito e righe ignorabili', () => {
   const r = parseDds(['', '      * non DDS', dds({ comment: true, kw: 'x' }), dds({ name: 'A', len: '1', type: 'A' })]);
   assert.equal(r.formati.length, 1);
-  assert.equal(r.formati[0].nome, '(implicito)');
+  assert.equal(r.formati[0].nome, '(implicit)');
+  setLocale('IT');
+  try {
+    assert.equal(parseDds([dds({ name: 'A', len: '1', type: 'A' })]).formati[0].nome, '(implicito)');
+  } finally {
+    setLocale('EN');
+  }
+});
+
+test('nomi dei tipi e degli usi nella lingua scelta', () => {
+  const lines = [dds({ form: 'R', name: 'F' }), dds({ name: 'C', len: '5', type: 'A', usage: 'H' }), dds({ name: 'D', len: '8', type: 'L', usage: 'I' })];
+  const en = parseDds(lines).formati[0].campi;
+  assert.deepEqual([en[0].tipo, en[0].uso, en[1].tipo, en[1].uso], ['character', 'hidden', 'date', 'input']);
+  setLocale('IT');
+  try {
+    const it = parseDds(lines).formati[0].campi;
+    assert.deepEqual([it[0].tipo, it[0].uso, it[1].tipo, it[1].uso], ['carattere', 'nascosto', 'data', 'input']);
+  } finally {
+    setLocale('EN');
+  }
 });

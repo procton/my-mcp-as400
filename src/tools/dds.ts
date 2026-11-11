@@ -5,12 +5,13 @@ import { parseDds, type DdsKeyword } from '../ddsparse.js';
 import { json, tool, pick } from './common.js';
 import { readMemberLines } from './source.js';
 import type { ToolResult } from './common.js';
+import { t, paramName } from '../i18n.js';
 
 const input = {
-  libreria: z.string().describe('Libreria del file (con oggetto) o del file sorgente (con file+membro)'),
-  oggetto: z.string().optional().describe('Nome del file compilato (PF, LF, DSPF, PRTF): il sorgente è ricavato dall\'oggetto'),
-  file: z.string().optional().describe('File sorgente DDS (es. QDDSSRC), in alternativa a oggetto'),
-  membro: z.string().optional().describe('Membro DDS, con file'),
+  libreria: z.string(),
+  oggetto: z.string().optional(),
+  file: z.string().optional(),
+  membro: z.string().optional(),
 };
 
 const kw = (k: DdsKeyword): string => (k.argomenti !== undefined ? `${k.nome}(${k.argomenti})` : k.nome);
@@ -21,7 +22,7 @@ async function resolveSource(lib: string, name: string): Promise<{
 }> {
   const note: string[] = [];
   const o = await normalizedQuery(`SELECT * FROM TABLE(QSYS2.OBJECT_STATISTICS(?, '*FILE', ?))`, [lib, name]);
-  if (o.length === 0) throw new Error(`File non trovato: ${lib}/${name}`);
+  if (o.length === 0) throw new Error(t({ it: 'File non trovato: {lib}/{name}', en: 'File not found: {lib}/{name}' }, { lib, name }));
   const attr = String(pick(o[0], 'OBJATTRIBUTE') ?? '');
   const base = { attr, text: pick(o[0], 'OBJTEXT') ?? null, created: pick(o[0], 'OBJCREATED') ?? null };
   const sFile = pick(o[0], 'SOURCE_FILE') as string | null;
@@ -39,9 +40,12 @@ async function resolveSource(lib: string, name: string): Promise<{
   if (sFile) {
     const l = objName(sLib, 'libreria');
     if (await exists(l, sFile, sMbr)) return { srcLib: l, srcFile: sFile, srcMbr: sMbr, ...base, note };
-    note.push(`il sorgente indicato dall'oggetto (${sLib}/${sFile}(${sMbr})) non esiste su questo sistema`);
+    note.push(t({
+      it: "il sorgente indicato dall'oggetto ({src}) non esiste su questo sistema",
+      en: 'the source named by the object ({src}) does not exist on this system',
+    }, { src: `${sLib}/${sFile}(${sMbr})` }));
   } else {
-    note.push("l'oggetto non riporta il sorgente di origine");
+    note.push(t({ it: "l'oggetto non riporta il sorgente di origine", en: 'the object does not report its source of origin' }));
   }
   // fallback: membro con lo stesso nome in un file sorgente della libreria dell'oggetto
   const cand = await normalizedQuery(
@@ -53,13 +57,22 @@ async function resolveSource(lib: string, name: string): Promise<{
   );
   if (cand.length === 1) {
     const f = String(pick(cand[0], 'F'));
-    note.push(`sorgente dedotto per nome: ${lib}/${f}(${name}) — verifica che corrisponda alla versione compilata`);
+    note.push(t({
+      it: 'sorgente dedotto per nome: {src} — verifica che corrisponda alla versione compilata',
+      en: 'source inferred by name: {src} — check that it matches the compiled version',
+    }, { src: `${lib}/${f}(${name})` }));
     return { srcLib: lib, srcFile: f, srcMbr: name, ...base, note };
   }
   if (cand.length > 1) {
-    throw new Error(`${note[0]}; trovati più membri ${name} in ${lib}: ${cand.map((c) => pick(c, 'F')).join(', ')} — indica 'file' e 'membro'`);
+    throw new Error(t({
+      it: "{first}; trovati più membri {name} in {lib}: {list} — indica '{file}' e '{membro}'",
+      en: "{first}; several members {name} found in {lib}: {list} — specify '{file}' and '{membro}'",
+    }, { first: note[0], name, lib, list: cand.map((c) => pick(c, 'F')).join(', '), file: paramName('file'), membro: paramName('membro') }));
   }
-  throw new Error(`${note[0]}; nessun membro ${name} trovato in ${lib}. Indica 'libreria' del sorgente, 'file' e 'membro'.`);
+  throw new Error(t({
+    it: "{first}; nessun membro {name} trovato in {lib}. Indica '{libreria}' del sorgente, '{file}' e '{membro}'.",
+    en: "{first}; no member {name} found in {lib}. Specify the source '{libreria}', '{file}' and '{membro}'.",
+  }, { first: note[0], name, lib, libreria: paramName('libreria'), file: paramName('file'), membro: paramName('membro') }));
 }
 
 /** Descrive struttura (formati, campi, chiavi, parole chiave) di un file PF/LF/DSPF/PRTF dal suo sorgente DDS. */
@@ -89,10 +102,16 @@ export const ddsDescribe = tool<
     meta.sorgente_modificato = srcChanged || null;
     meta.oggetto_creato = r.created;
     if (srcChanged && r.created && srcChanged > String(r.created)) {
-      notes.push("il sorgente è stato modificato DOPO la creazione dell'oggetto: la descrizione potrebbe non coincidere con il file compilato");
+      notes.push(t({
+        it: "il sorgente è stato modificato DOPO la creazione dell'oggetto: la descrizione potrebbe non coincidere con il file compilato",
+        en: 'the source was modified AFTER the object was created: the description may not match the compiled file',
+      }));
     }
   } else {
-    if (!args.file || !args.membro) throw new Error("Indica 'oggetto' oppure 'file' e 'membro'");
+    if (!args.file || !args.membro) throw new Error(t({
+      it: "Indica '{oggetto}' oppure '{file}' e '{membro}'",
+      en: "Provide '{oggetto}' or '{file}' and '{membro}'",
+    }, { oggetto: paramName('oggetto'), file: paramName('file'), membro: paramName('membro') }));
     srcFile = objName(args.file, 'file');
     srcMbr = objName(args.membro, 'membro');
   }

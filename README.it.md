@@ -7,6 +7,9 @@ sorgenti (RPG/CL/DDS), IFS, file fisici/logici via SQL, code di stampa.
 Si collega a qualunque client MCP su stdio; sono documentati [Claude Code](#claude-code),
 [Codex](#codex) e [OpenCode](#opencode).
 
+> **Lingua.** Dalla versione con `LOCALE` il server parla **inglese** per impostazione predefinita. Questo README descrive i
+> nomi italiani: per ottenerli imposta `LOCALE=IT` nel `.env`. Vedi [Lingua](#lingua-locale).
+
 Basato su `node-jt400` (JDBC JT400 via bridge Java): richiede **Node >= 22** e **un JDK/JRE Java**.
 Testato su **IBM i 7.4**. Per verificare la compatibilità con altra versioni, utilizzare il comando **npm run test:e2e**
 
@@ -68,6 +71,93 @@ Le risorse usano la stessa logica dei tool: valgono `ALLOWED_LIBS`, `IFS_ALLOWED
 | `interroga_dati` | rispondere a una domanda sui dati: trovare file e campi giusti, scrivere una SELECT di sola lettura, eseguirla e riportare risposta, query e assunzioni |
 | `spiega_stampa` | descrivere il layout di un PRTF/DSPF e confrontarlo con gli spool reali |
 
+## Lingua (`LOCALE`)
+
+Il server parla inglese per impostazione predefinita. Imposta `LOCALE` nel `.env` per scegliere:
+
+| `LOCALE` | Effetto |
+|---|---|
+| `EN` (predefinito, anche se manca o è vuota) | descrizioni di tool/prompt/risorse, nomi dei parametri, chiavi dei risultati, messaggi d'errore e testi dei prompt in inglese |
+| `IT` | le stesse cose, in italiano |
+
+Il valore non distingue maiuscole e minuscole (`it`, `IT`); qualsiasi altro valore ferma il server all'avvio con un messaggio esplicativo.
+I nomi dei tool sono sempre gli stessi (`as400_...`). La lingua è decisa una volta sola, all'avvio: riavvia il client dopo averla cambiata.
+
+> **Aggiornando da una versione senza `LOCALE`.** Il server era solo in italiano. Senza `LOCALE` ora è in inglese, quindi
+> cambiano i nomi dei parametri, dei prompt e le chiavi dei risultati. Per mantenere il comportamento precedente imposta `LOCALE=IT`.
+
+**Questo README documenta i nomi italiani, cioè quelli che si ottengono con `LOCALE=IT`** (tool, parametri, prompt, risorse e chiavi).
+La documentazione in inglese è in [README.md](README.md).
+
+Corrispondenza dei nomi (quelli non elencati sono uguali nelle due lingue, per esempio `file`, `outq`, `job`, `query`, `offset`, `utf8`):
+
+**Parametri:**
+
+| `IT` | `EN` |
+|---|---|
+| `libreria` | `library` |
+| `membro` | `member` |
+| `filtro` | `filter` |
+| `percorso` | `path` |
+| `numeriRiga` | `lineNumbers` |
+| `daRiga` | `fromLine` |
+| `aRiga` | `toLine` |
+| `testo` | `text` |
+| `tipo` | `type` |
+| `limite` | `limit` |
+| `maxMembri` | `maxMembers` |
+| `maiuscole` | `caseSensitive` |
+| `parametri` | `parameters` |
+| `campo` | `field` |
+| `utente` | `user` |
+| `numero` | `number` |
+| `daPagina` | `fromPage` |
+| `aPagina` | `toPage` |
+| `pulisci` | `clean` |
+| `stato` | `status` |
+| `datiUtente` | `userData` |
+| `dal` | `from` |
+| `al` | `to` |
+| `oggetto` | `object` |
+| `attributo` | `attribute` |
+| `profondita` | `depth` |
+| `maxVoci` | `maxEntries` |
+| `lunghezza` | `length` |
+| `maxFile` | `maxFiles` |
+| `maxByteFile` | `maxFileBytes` |
+| `domanda` | `question` |
+| `nome` | `name` |
+| `data` | `date` |
+
+**Valori enumerati:**
+
+| Tool, parametro | `IT` | `EN` |
+|---|---|---|
+| `as400_table_list`, `tipo` | `tutti`, `fisici`, `logici`, `viste`, `sorgenti` | `all`, `physical`, `logical`, `views`, `sources` |
+| `as400_routine_list`, `tipo` | `procedure`, `funzioni`, `tutte` | `procedures`, `functions`, `all` |
+| `as400_ifs_list`, `tipo` | `tutti`, `file`, `directory` | `all`, `file`, `directory` |
+
+**Prompt:**
+
+| `IT` | `EN` |
+|---|---|
+| `spiega_programma` | `explain_program` |
+| `documenta_libreria` | `document_library` |
+| `analizza_file` | `analyze_file` |
+| `dove_e_usato` | `find_usages` |
+| `analizza_spool` | `analyze_spool` |
+| `interroga_dati` | `query_data` |
+| `spiega_stampa` | `explain_print_file` |
+
+**Risorse:** cambia solo quella di sistema: `as400://sistema` (`IT`) / `as400://system` (`EN`).
+
+**Chiavi dei risultati:** seguono la lingua (per esempio `libreria`/`library`, `elenco`/`list`, `nota`/`note`, `righe_totali`/`total_lines`,
+`chiave_dds`/`dds_key`, `sorgente`/`source`, `trovate`/`found`). La corrispondenza completa è la tabella `KEYS_EN` in
+[`src/i18n.ts`](src/i18n.ts). Le righe `dati` restituite da `as400_sql_query` sono righe delle tue tabelle e non vengono mai tradotte.
+
+Non dipendono da `LOCALE`: il testo degli oggetti IBM i (descrizioni, contenuto degli spool, sorgenti) e i messaggi prodotti da IBM i stesso
+(errori SQL, messaggi `CPF`), che usano la lingua del job sul server.
+
 ## Configurazione
 
 ```bash
@@ -76,7 +166,7 @@ chmod 600 .env          # le credenziali restano locali
 # compila AS400_HOST / AS400_USER / AS400_PASSWORD
 ```
 
-Variabili opzionali: `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
+Variabili opzionali: `LOCALE` (`EN` o `IT`, default `EN`), `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
 `SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`, `SPOOL_CHARSET` (charset ASCII del testo degli spool dopo la conversione, default `cp850`), `SPOOL_WSCST` (oggetto WSCST per la conversione, default `/QSYS.LIB/QWPDEFAULT.WSCST`), `SPOOL_MAX_READ_BYTES`, `ALLOW_QTEMP_ALIAS`, `SQL_TIMEOUT_MS`, `SEARCH_TIMEOUT_MS`, `SEARCH_MAX_MEMBERS`, `IFS_BINARY_MAX_BYTES`, `IFS_SEARCH_MAX_FILES`, `AUDIT_LOG`, `ALLOWED_LIBS` (lista librerie
 consentite), `IFS_ALLOWED_PREFIXES` (prefissi percorso IFS consentiti), `AS400_JDBC_EXTRA`
 (extraproperties JDBC in formato `chiave=valore&chiave=valore`).
@@ -89,7 +179,8 @@ npm run build
 npm run test:connection
 npm test            # test unitari (non richiedono connessione)
 npm run typecheck
-npm run test:e2e    # avvia il server e lo prova con un client MCP (richiede la connessione all'IBM i)
+npm run test:e2e    # avvia il server e lo prova con un client MCP, in entrambe le lingue (richiede la connessione all'IBM i)
+                    # E2E_LOCALE=EN o E2E_LOCALE=IT lo limita a una lingua
 ```
 
 ## Integrazione con i client MCP

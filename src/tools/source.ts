@@ -4,13 +4,14 @@ import { extractRefs, familyOf, type RefKind } from '../srcanalysis.js';
 import { nameCond } from './catalog.js';
 import { normalizedQuery, getAliasPool, withTimeout, likeP, describeError } from '../pool.js';
 import { getConfig, objName } from '../config.js';
-import { text, json, tool, capText, pick, numberLines } from './common.js';
+import { text, json, tool, capText, pick, numberLines, metaLine } from './common.js';
 import type { ToolResult } from './common.js';
+import { t, paramName } from '../i18n.js';
 
 const inputList = {
-  libreria: z.string().describe('Libreria contenente il file sorgente (max 10 caratteri)'),
-  file: z.string().optional().describe('Nome del file sorgente (es. QRPGSRC, QCLSRC). Se omesso elenca i file sorgente della libreria'),
-  filtro: z.string().optional().describe('Filtro nome (SQL LIKE: % e _)'),
+  libreria: z.string(),
+  file: z.string().optional(),
+  filtro: z.string().optional(),
 };
 
 /** Elenca file sorgente di una libreria, oppure i membri di un file sorgente. */
@@ -29,7 +30,7 @@ export const sourceList = tool<
       [lib],
     );
     if (rows.length === 0) {
-      return json({ libreria: lib, file_sorgente: [], nota: 'nessun file sorgente (FILE_TYPE=S) in questa libreria' });
+      return json({ libreria: lib, file_sorgente: [], nota: t({ it: 'nessun file sorgente (FILE_TYPE=S) in questa libreria', en: 'no source files (FILE_TYPE=S) in this library' }) });
     }
     return json({ libreria: lib, file_sorgente: rows });
   }
@@ -67,7 +68,10 @@ export const sourceList = tool<
 export async function readMemberLines(lib: string, file: string, membro: string): Promise<string[]> {
   const cfg = getConfig();
   if (!cfg.allowQtempAlias) {
-    throw new Error('La lettura dei membri richiede alias temporanei: imposta ALLOW_QTEMP_ALIAS=true');
+    throw new Error(t({
+      it: 'La lettura dei membri richiede alias temporanei: imposta ALLOW_QTEMP_ALIAS=true',
+      en: 'Reading members needs temporary aliases: set ALLOW_QTEMP_ALIAS=true',
+    }));
   }
   const alias = 'MCPA' + randomBytes(4).toString('hex').toUpperCase();
   // CREATE ALIAS + SELECT devono girare sulla STESSA connessione (stesso job):
@@ -87,10 +91,13 @@ export async function readMemberLines(lib: string, file: string, membro: string)
         } catch { /* ignora */ }
       }
     },
-  ), cfg.sqlTimeoutMs, 'lettura membro')) as Record<string, unknown>[];
+  ), cfg.sqlTimeoutMs, { it: 'lettura membro', en: 'member read' })) as Record<string, unknown>[];
   } catch (err) {
     const msg = describeError(err);
-    if (/SQL0204|SQL0443|\*MEM/.test(msg)) throw new Error(`Membro o file sorgente non trovato: ${lib}/${file}(${membro})`);
+    if (/SQL0204|SQL0443|\*MEM/.test(msg)) throw new Error(t({
+      it: 'Membro o file sorgente non trovato: {src}',
+      en: 'Member or source file not found: {src}',
+    }, { src: `${lib}/${file}(${membro})` }));
     throw err;
   }
   return rows.map((r) => String(pick(r, 'SRCDTA') ?? '').replace(/\s+$/, ''));
@@ -102,12 +109,12 @@ interface AliasTx {
 }
 
 const inputRead = {
-  libreria: z.string().describe('Libreria del file sorgente (max 10 caratteri)'),
-  file: z.string().describe('Nome del file sorgente (es. QRPGSRC)'),
-  membro: z.string().describe('Nome del membro da leggere'),
-  numeriRiga: z.boolean().optional().describe('Prefissa ogni riga con il numero progressivo (default true)'),
-  daRiga: z.number().int().min(1).optional().describe('Riga di partenza (1-based), per leggere in blocchi'),
-  aRiga: z.number().int().min(1).optional().describe('Riga di fine inclusa'),
+  libreria: z.string(),
+  file: z.string(),
+  membro: z.string(),
+  numeriRiga: z.boolean().optional(),
+  daRiga: z.number().int().min(1).optional(),
+  aRiga: z.number().int().min(1).optional(),
 };
 
 /** Legge il testo di un membro sorgente (RPG, CL, DDS, ...) tramite alias QTEMP. */
@@ -130,9 +137,12 @@ export const sourceRead = tool<
     prima_riga: sliced.length ? start + 1 : 0,
   };
   if (truncated || (args.aRiga === undefined && start + sliced.length < lines.length)) {
-    meta.nota = `troncato a ${cfg.sourceMaxLines} righe (SOURCE_MAX_LINES); usa daRiga/aRiga per leggere il resto`;
+    meta.nota = t({
+      it: 'troncato a {n} righe (SOURCE_MAX_LINES); usa {da}/{a} per leggere il resto',
+      en: 'truncated to {n} lines (SOURCE_MAX_LINES); use {da}/{a} to read the rest',
+    }, { n: cfg.sourceMaxLines, da: paramName('daRiga'), a: paramName('aRiga') });
   }
-  return text(`${JSON.stringify(meta)}\n${capText(body, cfg.sourceMaxChars, 'sorgente')}`);
+  return text(`${metaLine(meta)}\n${capText(body, cfg.sourceMaxChars, { it: 'sorgente', en: 'source' })}`);
 });
 
 /* ---------------- ricerca testuale nei membri ---------------- */
@@ -140,13 +150,13 @@ export const sourceRead = tool<
 const SAFE_NAME = /^[A-Z0-9_$#@]{1,10}$/;
 
 const inputSearch = {
-  libreria: z.string().describe('Libreria dei file sorgente (max 10 caratteri)'),
-  testo: z.string().min(2).describe('Testo da cercare (sottostringa, non regex)'),
-  file: z.string().optional().describe('File sorgente (SQL LIKE, es. QRPGLESRC o Q%SRC); default tutti i file sorgente della libreria'),
-  membro: z.string().optional().describe('Filtro nome membro (SQL LIKE)'),
-  maiuscole: z.boolean().optional().describe('Distingue maiuscole/minuscole (default false)'),
-  limite: z.number().int().min(1).max(1000).optional().describe('Massimo di righe trovate (default 100)'),
-  maxMembri: z.number().int().min(1).optional().describe('Massimo di membri da scansionare (default SEARCH_MAX_MEMBERS=150)'),
+  libreria: z.string(),
+  testo: z.string().min(2),
+  file: z.string().optional(),
+  membro: z.string().optional(),
+  maiuscole: z.boolean().optional(),
+  limite: z.number().int().min(1).max(1000).optional(),
+  maxMembri: z.number().int().min(1).optional(),
 };
 
 /** Cerca un testo in tutti i membri sorgente di una libreria (alias in batch + UNION ALL lato server). */
@@ -154,10 +164,13 @@ export const sourceSearch = tool<
   z.infer<z.ZodObject<typeof inputSearch>>
 >('as400_source_search', async (args): Promise<ToolResult> => {
   const cfg = getConfig();
-  if (!cfg.allowQtempAlias) throw new Error('La ricerca nei membri richiede alias temporanei: imposta ALLOW_QTEMP_ALIAS=true');
+  if (!cfg.allowQtempAlias) throw new Error(t({
+    it: 'La ricerca nei membri richiede alias temporanei: imposta ALLOW_QTEMP_ALIAS=true',
+    en: 'Searching members needs temporary aliases: set ALLOW_QTEMP_ALIAS=true',
+  }));
   const lib = objName(args.libreria, 'libreria');
   const needle = args.testo.trim();
-  if (needle.length < 2) throw new Error('Il testo da cercare deve avere almeno 2 caratteri');
+  if (needle.length < 2) throw new Error(t({ it: 'Il testo da cercare deve avere almeno 2 caratteri', en: 'The text to search for must be at least 2 characters long' }));
   const limite = args.limite ?? 100;
   const maxMembri = Math.min(args.maxMembri ?? cfg.searchMaxMembers, 400);
   const caseSens = args.maiuscole === true;
@@ -207,7 +220,7 @@ export const sourceSearch = tool<
           try { await tx.update(`DROP ALIAS QTEMP.${a}`); } catch { /* ignora */ }
         }
       }
-    }), left, 'ricerca nei sorgenti')) as Record<string, unknown>[];
+    }), left, { it: 'ricerca nei sorgenti', en: 'source search' })) as Record<string, unknown>[];
     scanned += batch.length;
     for (const r of rows) {
       found.push({
@@ -226,10 +239,16 @@ export const sourceSearch = tool<
     risultati: found,
   };
   const note: string[] = [];
-  if (found.length >= limite) note.push(`raggiunto il limite di ${limite} righe (alcuni membri possono non essere stati scansionati)`);
-  if (truncMembers) note.push(`elenco membri troncato a ${maxMembri}: restringi con 'file'/'membro' o aumenta 'maxMembri'`);
-  if (timedOut) note.push(`tempo massimo di ricerca (${cfg.searchTimeoutMs} ms) raggiunto`);
-  if (members.length !== todo.length + (truncMembers ? 1 : 0)) note.push('alcuni membri con nomi non standard sono stati saltati');
+  if (found.length >= limite) note.push(t({
+    it: 'raggiunto il limite di {n} righe (alcuni membri possono non essere stati scansionati)',
+    en: 'reached the limit of {n} lines (some members may not have been scanned)',
+  }, { n: limite }));
+  if (truncMembers) note.push(t({
+    it: "elenco membri troncato a {n}: restringi con '{file}'/'{membro}' o aumenta '{maxMembri}'",
+    en: "member list truncated to {n}: narrow with '{file}'/'{membro}' or raise '{maxMembri}'",
+  }, { n: maxMembri, file: paramName('file'), membro: paramName('membro'), maxMembri: paramName('maxMembri') }));
+  if (timedOut) note.push(t({ it: 'tempo massimo di ricerca ({ms} ms) raggiunto', en: 'maximum search time ({ms} ms) reached' }, { ms: cfg.searchTimeoutMs }));
+  if (members.length !== todo.length + (truncMembers ? 1 : 0)) note.push(t({ it: 'alcuni membri con nomi non standard sono stati saltati', en: 'some members with non-standard names were skipped' }));
   if (note.length) out.nota = note.join('; ');
   return json(out);
 });
@@ -237,10 +256,10 @@ export const sourceSearch = tool<
 /* ---------------- riferimenti di un sorgente ---------------- */
 
 const inputRefs = {
-  libreria: z.string().describe('Libreria del file sorgente'),
-  file: z.string().describe('File sorgente (es. QRPGLESRC)'),
-  membro: z.string().describe('Membro da analizzare'),
-  tipo: z.string().optional().describe('Tipo sorgente (RPGLE, CLLE, PF, ...); se omesso è letto dal membro'),
+  libreria: z.string(),
+  file: z.string(),
+  membro: z.string(),
+  tipo: z.string().optional(),
 };
 
 /** Estrae file, programmi chiamati, copy, data area, tabelle SQL e comandi usati da un membro sorgente. */
@@ -252,12 +271,12 @@ export const sourceRefs = tool<
   const membro = objName(args.membro, 'membro');
   let tipo = args.tipo?.trim().toUpperCase();
   if (!tipo) {
-    const t = await normalizedQuery(
+    const rowsType = await normalizedQuery(
       `SELECT SOURCE_TYPE FROM QSYS2.SYSPARTITIONSTAT WHERE SYSTEM_TABLE_SCHEMA = ? AND SYSTEM_TABLE_NAME = ? AND SYSTEM_TABLE_MEMBER = ?`,
       [lib, file, membro],
     );
-    if (t.length === 0) throw new Error(`Membro non trovato: ${lib}/${file}(${membro})`);
-    tipo = String(pick(t[0], 'SOURCE_TYPE') ?? '').trim().toUpperCase();
+    if (rowsType.length === 0) throw new Error(t({ it: 'Membro non trovato: {src}', en: 'Member not found: {src}' }, { src: `${lib}/${file}(${membro})` }));
+    tipo = String(pick(rowsType[0], 'SOURCE_TYPE') ?? '').trim().toUpperCase();
   }
   const lines = await readMemberLines(lib, file, membro);
   const family = familyOf(tipo);
@@ -275,6 +294,9 @@ export const sourceRefs = tool<
     comandi_cl: group('comando'),
     formati_record: group('formato_record'),
     chiavi: group('chiave'),
-    nota: 'Analisi statica euristica: chiamate dinamiche (nome in variabile), copy annidati e membri non risolti non sono rilevati.',
+    nota: t({
+      it: 'Analisi statica euristica: chiamate dinamiche (nome in variabile), copy annidati e membri non risolti non sono rilevati.',
+      en: 'Heuristic static analysis: dynamic calls (name in a variable), nested copy members and unresolved members are not detected.',
+    }),
   });
 });

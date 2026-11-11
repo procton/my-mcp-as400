@@ -7,8 +7,11 @@ Guide to the most common problems with `my-mcp-as400`. Back to the [README](../R
 The solutions below come from cases met during development, verified on an IBM i V7R4. Where something has not been tried on
 other releases (in particular 7.3) it is stated explicitly.
 
-> **About the messages.** The server's error messages and result fields are in Italian. They are quoted here exactly as the
-> server prints them (so you can search for them), followed by their meaning in English.
+> **About names and messages.** The server's language is chosen with `LOCALE` in the `.env` (`EN` by default, or `IT`).
+> This guide uses the English names (tools are always `as400_*`; parameters such as `library`, `fromLine`; result keys such as `note`)
+> and quotes the English messages. With `LOCALE=IT` names and messages are Italian: see the Italian guide
+> ([RISOLUZIONE-PROBLEMI.md](RISOLUZIONE-PROBLEMI.md)) and the name table in the [README](../README.md#language-locale).
+> Messages that come from IBM i itself (SQL errors, `CPF` messages) are in the language of the job on the server, whatever `LOCALE` is.
 
 ## Contents
 
@@ -63,7 +66,7 @@ echo "$JAVA_HOME"        # must point to the JDK
 If the installation already happened with the wrong JDK, after fixing it: `rm -rf node_modules && npm install`.
 The project was tried with Node 22 and OpenJDK 21. `package.json` requires Node ≥ 22.
 
-### `Variabile ambiente mancante: AS400_HOST (vedi .env.example)` (missing environment variable)
+### `Missing environment variable: AS400_HOST (see .env.example)`
 
 The `.env` was not found or is incomplete. The server looks for it **first in the project folder** (the one with `package.json`,
 wherever it is launched from) and then in the current directory. So:
@@ -129,7 +132,7 @@ To try the server by hand, with no client at all, use `npm run test:e2e`.
 | Timeout or `Unable to connect` on the first query | Host unreachable or Host Servers not running | `ping` the host. On the IBM i: `STRHOSTSVR SERVER(*ALL)` and check that the *DATABASE and *SIGNON servers are active (ports 8471 and 8476; with SSL 9471 and 9476). |
 | `[CPF22E2]`, `[CPF22E3]`, `Password not correct`, authentication errors | Wrong user or password, disabled profile or expired password | Try the same credentials with a 5250 session. `DSPUSRPRF` shows status and expiry. |
 | `Connection authorization failure occurred` | A write statement (for example `CREATE ALIAS` or `CALL`) was run on the main pool, which is `access=read only` | This is intended: the server is read-only and the IBM i server rejects the write. Legitimate tools never try it; if it appears, it almost always means an unexpected query. See section 6. |
-| `Timeout (60000 ms) su query SQL` | Slow query or catalog | Section 8. |
+| `Timeout (60000 ms) on SQL query: operation abandoned` | Slow query or catalog | Section 8. |
 
 **SSL.** For an encrypted connection add to the `.env`:
 
@@ -145,8 +148,8 @@ With certificates not recognized by the JDK, import them into the Java truststor
 ## 5. Authorities and "not found"
 
 Many tools return an empty or "not found" result both when the object does not exist and when the profile lacks the
-authority to see it. The message says so: `directory vuota, inesistente o senza autorità` (directory empty, nonexistent or no authority),
-`Percorso non trovato o senza autorità` (path not found or no authority). If you suspect an authority problem, try with a 5250 session using the same profile.
+authority to see it. The message says so: `directory empty, nonexistent or no authority`,
+`Path not found or no authority`. If you suspect an authority problem, try with a 5250 session using the same profile.
 
 Authorities the dedicated profile needs, read-only:
 
@@ -169,51 +172,54 @@ SELECT COUNT(*) FROM QSYS2.SYSTABLES WHERE SYSTEM_TABLE_SCHEMA = 'LIBRARY'
 
 ## 6. Tool error messages
 
+These are the messages with the default `LOCALE=EN`. `X`, `LIB`, ... stand for the values in your request.
+
 ### Restrictions configured by the administrator
 
 | Message | Meaning | Fix |
 |---|---|---|
-| `Libreria non consentita (ALLOWED_LIBS): X` | Library not allowed: `ALLOWED_LIBS` is set and X is not in it | Add X to `ALLOWED_LIBS` or empty the variable. |
-| `Con ALLOWED_LIBS attivo ogni tabella/funzione va qualificata con la libreria (LIB.TABELLA)` | With the list active, every table/function must be qualified with its library | Write `LIB.TABLE` for every table in `FROM`/`JOIN`. The `QSYS2`, `SYSIBM`, `SYSIBMADM`, `SYSTOOLS` catalogs are always allowed. |
-| `Percorso IFS non consentito (IFS_ALLOWED_PREFIXES=...)` | IFS path not allowed: it is outside the allowed prefixes | Add the prefix to `IFS_ALLOWED_PREFIXES` or use a path inside it. |
-| `... è un collegamento simbolico (non seguito con IFS_ALLOWED_PREFIXES attivo)` | A path component is a symbolic link (not followed while `IFS_ALLOWED_PREFIXES` is active) | This is intended: a link could point outside the allowed area. Use the real target path, if it falls within the prefixes. |
+| `Library not allowed (ALLOWED_LIBS): X` | `ALLOWED_LIBS` is set and X is not in it | Add X to `ALLOWED_LIBS` or empty the variable. |
+| `With ALLOWED_LIBS active every table/function must be qualified with its library (LIB.TABLE): 'name'` | With the list active, the SQL cannot use names without a library | Write `LIB.TABLE` for every table in `FROM`/`JOIN`. The `QSYS2`, `SYSIBM`, `SYSIBMADM`, `SYSTOOLS` catalogs are always allowed. |
+| `IFS path not allowed (IFS_ALLOWED_PREFIXES=...): /path` | The path is outside the allowed prefixes | Add the prefix to `IFS_ALLOWED_PREFIXES` or use a path inside it. |
+| `Path not allowed: '...' is a symbolic link (not followed while IFS_ALLOWED_PREFIXES is active)` | A path component is a symbolic link | This is intended: a link could point outside the allowed area. Use the real target path, if it falls within the prefixes. |
 
 ### Read-only
 
 | Message | Meaning |
 |---|---|
-| `Ammesse solo istruzioni SELECT o WITH (server read-only)` | Only `SELECT` and `WITH` statements are allowed: `as400_sql_query` accepts nothing else. |
-| `Parola chiave non consentita (server read-only): X` | Keyword not allowed: the query contains `INSERT`, `UPDATE`, `DELETE`, `CALL`, `CREATE`, `DROP`, ... |
-| `Oggetto/funzione non consentita in sql_query: IFS_READ` | Object/function not allowed in `sql_query`: `IFS_*`, `SPOOLED_FILE_DATA` and `QCMDEXC` are blocked in free-form SQL, because they have dedicated tools with their own checks. Use `as400_ifs_read`, `as400_spool_read`, ... |
-| `Un solo statement SQL, senza punto e virgola` | A single SQL statement, without a semicolon: one statement per call. |
-| `Commento SQL non terminato` / `Stringa SQL non terminata` | Unterminated comment / string: unclosed quotes or `/* ... */` in the query. |
+| `Only SELECT or WITH statements are allowed (read-only server)` | `as400_sql_query` accepts only `SELECT` and `WITH`. |
+| `Keyword not allowed (read-only server): X` | The query contains `INSERT`, `UPDATE`, `DELETE`, `CALL`, `CREATE`, `DROP`, ... |
+| `Object/function not allowed in sql_query: IFS_READ (use the dedicated tools for IFS and spool)` | `IFS_*`, `SPOOLED_FILE_DATA` and `QCMDEXC` are blocked in free-form SQL, because they have dedicated tools with their own checks. Use `as400_ifs_read`, `as400_spool_read`, ... |
+| `Only one SQL statement, without a semicolon` | One statement per call. |
+| `Unterminated SQL comment` / `Unterminated SQL string` | Unclosed quotes or `/* ... */` in the query. |
 
 ### Sources
 
 | Message | Fix |
 |---|---|
-| `La lettura dei membri richiede alias temporanei: imposta ALLOW_QTEMP_ALIAS=true` | Member reading needs temporary aliases. `ALLOW_QTEMP_ALIAS` is `false`: set it back to `true`, or do not use `source_read`, `source_search`, `source_refs`, `dds_describe`. |
-| `Membro o file sorgente non trovato: LIB/FILE(MEMBRO)` | Member or source file not found. Check the names with `as400_source_list`. |
-| `ZZZ in *N di tipo *MEM non trovato` (raw SQL message) | Nonexistent member, in versions that do not remap the error: same meaning. |
+| `Reading members needs temporary aliases: set ALLOW_QTEMP_ALIAS=true` | `ALLOW_QTEMP_ALIAS` is `false`: set it back to `true`, or do not use `source_read`, `source_search`, `source_refs`, `dds_describe`. |
+| `Member or source file not found: LIB/FILE(MEMBER)` | Check the names with `as400_source_list`. |
+| `ZZZ in *N di tipo *MEM non trovato` (raw SQL message) | Nonexistent member, in versions that do not remap the error: same meaning. This text comes from IBM i, in the job language of your server. |
 
 ### Spool
 
 | Message | Fix |
 |---|---|
-| `Più file di spool col nome X: specifica 'numero'` | Several spooled files have that name. The message lists the most recent numbers. Add `numero`, or `utente` or `job`. |
-| `File di spool non trovato` | Spooled file not found. Check library and queue with `as400_spool_search`. The spooled file may have been deleted. |
-| `Conversione dello spool non riuscita (...). Verifica SPOOL_WSCST=...` | Spool conversion failed. The WSCST object does not exist or is not readable: set `SPOOL_WSCST` to a valid WSCST (`DSPOBJD OBJ(QSYS/QWPDEFAULT) OBJTYPE(*WSCST)`). |
-| `Indica almeno un filtro ...` (`spool_search`) | Give at least one filter. Scanning all queues is slow: provide user, name, job, date or library. |
+| `Several spooled files named X: specify 'number' (most recent: ...)` | The message lists the most recent numbers. Add `number`, or `user` or `job`. |
+| `Spooled file not found: LIB/QUEUE NAME` | Check library and queue with `as400_spool_search`. The spooled file may have been deleted. |
+| `Spool conversion failed (...). Check SPOOL_WSCST=...` | The WSCST object does not exist or is not readable: set `SPOOL_WSCST` to a valid WSCST (`DSPOBJD OBJ(QSYS/QWPDEFAULT) OBJTYPE(*WSCST)`). |
+| `Provide at least one filter among user, file, job, userData, from or library (scanning all queues is slow)` | Scanning all queues is slow: provide user, name, job, date or library. |
 
 ### Other
 
 | Message | Fix |
 |---|---|
-| `Timeout (N ms) su ...: operazione abbandonata` | Timeout, operation abandoned. Section 8. The timeout stops the MCP server's wait, not necessarily the work on the system. |
-| `... non valido: 'x' (max 10 caratteri [A-Z0-9_$#@])` | Invalid name. Object names are at most 10 characters and allow neither spaces nor dots. Long SQL names are not accepted by the object tools. |
-| `Percorso IFS non valido (deve essere assoluto)` or `componente '..' vietata` | Invalid IFS path (must be absolute / `..` component forbidden). Use absolute paths without `..`. |
-| `Tipo oggetto non valido: 'x'` | Invalid object type. Types are written with the asterisk: `*PGM`, `*SRVPGM`, `*DTAARA`. |
-| `La ricerca non è disponibile nei file system speciali` | Search is not available in the special file systems. In `/QSYS.LIB`, `/QDLS`, ... use `as400_source_search` and `as400_object_list`. |
+| `Timeout (N ms) on ...: operation abandoned` | Section 8. The timeout stops the MCP server's wait, not necessarily the work on the system. |
+| `Invalid library: 'x' (max 10 characters [A-Z0-9_$#@])` (also `member`, `file`, `object`, ...) | Object names are at most 10 characters and allow neither spaces nor dots. Long SQL names are not accepted by the object tools. |
+| `Invalid IFS path (must be absolute): ...` or `Invalid IFS path ('..' component not allowed): ...` | Use absolute paths without `..`. |
+| `Invalid object type: 'x' (e.g. *PGM, *SRVPGM, *CMD, *DTAARA)` | Types are written with the asterisk: `*PGM`, `*SRVPGM`, `*DTAARA`. |
+| `Search is not available in the special file systems (QSYS.LIB, QDLS, ...): for sources use as400_source_search` | In `/QSYS.LIB`, `/QDLS`, ... use `as400_source_search` and `as400_object_list`. |
+| `Invalid LOCALE 'xx': allowed values are IT or EN (default EN)` (at startup) | `LOCALE` in the `.env` must be `IT` or `EN` (case-insensitive), or empty/absent for `EN`. |
 
 ---
 
@@ -248,13 +254,13 @@ Early versions of the project lost leading spaces (RPG fixed-format: column 6 is
 
 ### All numbers are strings
 
-`"numero": "15"`, `"pagine": "3"`: the JDBC driver returns numbers as strings. This is the expected behavior; on input,
-numeric parameters (`numero`, `daRiga`, `limite`, ...) stay numbers.
+`"number": "15"`, `"pages": "3"`: the JDBC driver returns numbers as strings. This is the expected behavior; on input,
+numeric parameters (`number`, `fromLine`, `limit`, ...) stay numbers.
 
 ### Truncated source lines or fields
 
 The limits (`SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, ...) cut the answers and say so
-in a `nota` (note) in the result. Use `daRiga`/`aRiga`, `daPagina`/`aPagina` and the filters, or raise the limit in the `.env`.
+in a `note` in the result. Use `fromLine`/`toLine`, `fromPage`/`toPage` and the filters, or raise the limit in the `.env`.
 
 ---
 
@@ -263,11 +269,11 @@ in a `nota` (note) in the result. Use `daRiga`/`aRiga`, `daPagina`/`aPagina` and
 Production libraries hold thousands of objects and some catalog views are slow. What helps:
 
 - **Always filter.** `as400_table_list`, `as400_object_list` and `as400_column_search` have filters on name, type and text.
-  Listing all the `*FILE` objects of a library with 8000 files can exceed 60 seconds; with a prefix (`filtro: "AB%"`)
+  Listing all the `*FILE` objects of a library with 8000 files can exceed 60 seconds; with a prefix (`filter: "AB%"`)
   `as400_object_list` passes it to the API as a generic name and answers in a fraction of a second.
-- **`as400_column_search` requires at least `campo` or `testo`**, for the same reason.
+- **`as400_column_search` requires at least `field` or `text`**, for the same reason.
 - **`as400_source_search`** takes about 0.5 seconds per member (alias creation plus scan). Narrow it with `file` and
-  `membro`; the default cap is `SEARCH_MAX_MEMBERS=150` and the time limit is `SEARCH_TIMEOUT_MS=180000`.
+  `member`; the default cap is `SEARCH_MAX_MEMBERS=150` and the time limit is `SEARCH_TIMEOUT_MS=180000`.
 - **`as400_ifs_search`** is limited by `IFS_SEARCH_MAX_FILES`, by depth (default 3) and by the maximum size per file.
   It skips binary files and very large ones.
 - **`as400_ifs_list` on very populated directories** needs one call per directory (about 1 second, more with hundreds of entries).
@@ -291,7 +297,7 @@ tried on 7.3 and must be verified before use:
 | `as400_ifs_search`, `as400_ifs_read` | `QSYS2.IFS_READ` with `IGNORE_ERRORS` | As above; plain `ifs_read` may still work. |
 | `as400_ifs_list`, `as400_ifs_stat` | `QSYS2.IFS_OBJECT_STATISTICS` | Same. |
 | `as400_spool_*` | `QSYS2.OUTPUT_QUEUE_ENTRIES_BASIC` and `OUTPUT_QUEUE_INFO` | The tool reports `SQL0204` on the missing view. |
-| `as400_object_describe` | `QSYS2.PROGRAM_INFO`, `BOUND_MODULE_INFO`, `BOUND_SRVPGM_INFO`, `DATA_AREA_INFO` | The corresponding sections report an `errore` (error); the rest of the result stays. |
+| `as400_object_describe` | `QSYS2.PROGRAM_INFO`, `BOUND_MODULE_INFO`, `BOUND_SRVPGM_INFO`, `DATA_AREA_INFO` | The corresponding sections report an `error`; the rest of the result stays. |
 | `as400_routine_list` | `QSYS2.SYSROUTINES` | Same. |
 | `as400_spool_read` | `QWPDEFAULT` WSCST object | Set `SPOOL_WSCST`. |
 
@@ -314,7 +320,7 @@ verified. The group level determines which functions are available.
 
 Attach, without passwords:
 
-1. the IBM i version (`as400_system_info`, field `sistema.versione`), the Node version (`node -v`) and the JDK version (`java -version`);
+1. the IBM i version (`as400_system_info`, field `system.version`), the Node version (`node -v`) and the JDK version (`java -version`);
 2. the command you ran and the full message;
 3. the matching `audit` line (stderr or `AUDIT_LOG`), which reports tool, arguments and outcome;
 4. if the problem is in the results: the tool, the arguments and the type of object (CCSID, spool type, source type).

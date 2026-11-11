@@ -3,6 +3,7 @@ import type { ReadResourceResult } from '@modelcontextprotocol/sdk/types.js';
 import { normalizedQuery } from './pool.js';
 import { getConfig, objName } from './config.js';
 import { audit } from './audit.js';
+import { t as tr, paramName } from './i18n.js';
 import { capText } from './tools/common.js';
 import { readMemberLines } from './tools/source.js';
 import { ifsRead } from './tools/ifs.js';
@@ -23,7 +24,7 @@ export function textOf(r: ToolResult): string {
 function v(vars: Record<string, string | string[]>, name: string): string {
   const raw = vars[name];
   const s = Array.isArray(raw) ? raw[0] : raw;
-  if (!s) throw new Error(`Variabile mancante nell'URI: ${name}`);
+  if (!s) throw new Error(tr({ it: "Variabile mancante nell'URI: {name}", en: 'Missing variable in the URI: {name}' }, { name }));
   try {
     return decodeURIComponent(s);
   } catch {
@@ -115,18 +116,21 @@ export function registerResources(server: McpServer): void {
   const cfg = getConfig;
 
   server.registerResource(
-    'sistema',
-    'as400://sistema',
+    tr({ it: 'sistema', en: 'system' }),
+    tr({ it: 'as400://sistema', en: 'as400://system' }),
     {
-      title: 'Informazioni di sistema',
-      description: 'Utente connesso, versione IBM i e limiti attivi del server.',
+      title: tr({ it: 'Informazioni di sistema', en: 'System information' }),
+      description: tr({
+        it: 'Utente connesso, versione IBM i e limiti attivi del server.',
+        en: "Connected user, IBM i version and the server's active limits.",
+      }),
       mimeType: 'application/json',
     },
     async (uri) => text(uri, await audited('resource:sistema', {}, async () => textOf(await systemInfo({}))), 'application/json'),
   );
 
   server.registerResource(
-    'sorgente',
+    tr({ it: 'sorgente', en: 'source' }),
     new ResourceTemplate('as400://source/{lib}/{file}/{member}', {
       list: undefined,
       complete: {
@@ -136,8 +140,11 @@ export function registerResources(server: McpServer): void {
       },
     }),
     {
-      title: 'Membro sorgente',
-      description: 'Testo di un membro di un file sorgente (RPG, CL, DDS, ...) con le colonne originali. Es. as400://source/MYLIB/QRPGLESRC/PGM001',
+      title: tr({ it: 'Membro sorgente', en: 'Source member' }),
+      description: tr({
+        it: 'Testo di un membro di un file sorgente (RPG, CL, DDS, ...) con le colonne originali. Es. as400://source/MYLIB/QRPGLESRC/PGM001',
+        en: 'Text of a member of a source file (RPG, CL, DDS, ...) with the original columns. E.g. as400://source/MYLIB/QRPGLESRC/PGM001',
+      }),
       mimeType: 'text/plain',
     },
     async (uri, vars) => {
@@ -148,15 +155,20 @@ export function registerResources(server: McpServer): void {
         const lines = await readMemberLines(lib, file, member);
         const shown = lines.slice(0, cfg().sourceMaxLines);
         let out = shown.join('\n');
-        if (lines.length > shown.length) out += `\n... [troncato: ${lines.length - shown.length} righe omesse; usa as400_source_read con daRiga/aRiga]`;
-        return capText(out, cfg().sourceMaxChars, 'sorgente');
+        if (lines.length > shown.length) {
+          out += '\n' + tr({
+            it: '... [troncato: {n} righe omesse; usa as400_source_read con {da}/{a}]',
+            en: '... [truncated: {n} lines omitted; use as400_source_read with {da}/{a}]',
+          }, { n: lines.length - shown.length, da: paramName('daRiga'), a: paramName('aRiga') });
+        }
+        return capText(out, cfg().sourceMaxChars, { it: 'sorgente', en: 'source' });
       });
       return text(uri, body, 'text/plain');
     },
   );
 
   server.registerResource(
-    'file',
+    tr({ it: 'file', en: 'file' }),
     new ResourceTemplate('as400://file/{lib}/{name}', {
       list: undefined,
       complete: {
@@ -165,8 +177,11 @@ export function registerResources(server: McpServer): void {
       },
     }),
     {
-      title: 'Descrizione di un file',
-      description: 'Descrizione JSON di un file fisico/logico: campi, tipi, chiave DDS. Es. as400://file/MYLIB/CLIENTI',
+      title: tr({ it: 'Descrizione di un file', en: 'File description' }),
+      description: tr({
+        it: 'Descrizione JSON di un file fisico/logico: campi, tipi, chiave DDS. Es. as400://file/MYLIB/CLIENTI',
+        en: 'JSON description of a physical/logical file: fields, types, DDS key. E.g. as400://file/MYLIB/CUSTOMERS',
+      }),
       mimeType: 'application/json',
     },
     async (uri, vars) => {
@@ -178,33 +193,39 @@ export function registerResources(server: McpServer): void {
   );
 
   server.registerResource(
-    'ifs',
+    tr({ it: 'ifs', en: 'ifs' }),
     new ResourceTemplate('as400://ifs{+path}', { list: undefined }),
     {
-      title: 'File IFS',
-      description: 'Contenuto testuale di un file IFS. Es. as400://ifs/home/profilo/script.sh',
+      title: tr({ it: 'File IFS', en: 'IFS file' }),
+      description: tr({
+        it: 'Contenuto testuale di un file IFS. Es. as400://ifs/home/profilo/script.sh',
+        en: 'Text content of an IFS file. E.g. as400://ifs/home/profile/script.sh',
+      }),
       mimeType: 'text/plain',
     },
     async (uri, vars) => {
       const path = v(vars, 'path');
       const body = await audited('resource:ifs', { path }, async () => {
-        const t = textOf(await ifsRead({ percorso: path.startsWith('/') ? path : `/${path}`, numeriRiga: false }));
+        const out = textOf(await ifsRead({ percorso: path.startsWith('/') ? path : `/${path}`, numeriRiga: false }));
         // la prima riga è il JSON dei metadati
-        return t.startsWith('{') ? t.slice(t.indexOf('\n') + 1) : t;
+        return out.startsWith('{') ? out.slice(out.indexOf('\n') + 1) : out;
       });
       return text(uri, body, 'text/plain');
     },
   );
 
   server.registerResource(
-    'spool',
+    tr({ it: 'spool', en: 'spool' }),
     new ResourceTemplate('as400://spool/{lib}/{outq}/{file}/{number}', {
       list: undefined,
       complete: { lib: (value) => completeLibrary(value) },
     }),
     {
-      title: 'File di spool',
-      description: 'Contenuto testuale di un file di spool. Es. as400://spool/QGPL/QPRINT/ES52/6',
+      title: tr({ it: 'File di spool', en: 'Spooled file' }),
+      description: tr({
+        it: 'Contenuto testuale di un file di spool. Es. as400://spool/QGPL/QPRINT/ES52/6',
+        en: 'Text content of a spooled file. E.g. as400://spool/QGPL/QPRINT/ES52/6',
+      }),
       mimeType: 'text/plain',
     },
     async (uri, vars) => {
@@ -212,14 +233,15 @@ export function registerResources(server: McpServer): void {
       const outq = v(vars, 'outq');
       const file = v(vars, 'file');
       const numero = Number.parseInt(v(vars, 'number'), 10);
-      if (!Number.isInteger(numero) || numero < 1) throw new Error('Numero del file di spool non valido');
+      if (!Number.isInteger(numero) || numero < 1) throw new Error(tr({ it: 'Numero del file di spool non valido', en: 'Invalid spooled file number' }));
       const body = await audited('resource:spool', { lib, outq, file, numero }, async () => {
-        const t = textOf(await spoolRead({ libreria: lib, outq, file, numero }));
+        const out = textOf(await spoolRead({ libreria: lib, outq, file, numero }));
         try {
-          const j = JSON.parse(t) as { contenuto?: string };
-          return j.contenuto ?? t;
+          // la chiave del contenuto dipende dalla lingua (contenuto / content)
+          const j = JSON.parse(out) as { contenuto?: string; content?: string };
+          return j.contenuto ?? j.content ?? out;
         } catch {
-          return t;
+          return out;
         }
       });
       return text(uri, body, 'text/plain');

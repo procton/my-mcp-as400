@@ -1,5 +1,6 @@
 import { appendFileSync } from 'node:fs';
 import { getConfig } from './config.js';
+import { t } from './i18n.js';
 
 const MAX_FIELD = 500;
 
@@ -8,7 +9,11 @@ function sanitize(args: unknown): unknown {
   if (!args || typeof args !== 'object') return args;
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(args as Record<string, unknown>)) {
-    if (k === 'parametri') out[k] = Array.isArray(v) ? `[${v.length} parametri omessi]` : '[omessi]';
+    if (k === 'parametri') {
+      out[k] = Array.isArray(v)
+        ? t({ it: '[{n} parametri omessi]', en: '[{n} parameters omitted]' }, { n: v.length })
+        : t({ it: '[omessi]', en: '[omitted]' });
+    }
     else if (typeof v === 'string') out[k] = v.length > MAX_FIELD ? v.slice(0, MAX_FIELD) + '…' : v;
     else out[k] = v;
   }

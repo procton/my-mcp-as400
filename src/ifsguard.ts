@@ -1,5 +1,6 @@
 import { getConfig, ifsPath } from './config.js';
 import { normalizedQuery } from './pool.js';
+import { t } from './i18n.js';
 
 /** File system speciali: niente ricorsione/ricerca (usare i tool dedicati per sorgenti e oggetti). */
 const SPECIAL_FS = /^\/(QSYS\.LIB|QDLS|QNTC|QFILESVR\.400|QOPT|QLANSRV|QSR|QOPENSYS\/QSYS\.LIB)(\/|$)/i;
@@ -51,7 +52,10 @@ export async function safeIfsPath(value: string): Promise<string> {
     const child = dir === '/' ? `/${seg}` : `${dir}/${seg}`;
     const links = await symlinksIn(dir);
     if (links.has(child)) {
-      throw new Error(`Percorso non consentito: '${child}' è un collegamento simbolico (non seguito con IFS_ALLOWED_PREFIXES attivo)`);
+      throw new Error(t({
+        it: "Percorso non consentito: '{child}' è un collegamento simbolico (non seguito con IFS_ALLOWED_PREFIXES attivo)",
+        en: "Path not allowed: '{child}' is a symbolic link (not followed while IFS_ALLOWED_PREFIXES is active)",
+      }, { child }));
     }
     dir = child;
   }

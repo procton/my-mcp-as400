@@ -1,6 +1,7 @@
 /* Analisi statica euristica dei sorgenti IBM i (RPG, CL, DDS): estrae i riferimenti ad altri oggetti.
  * Non è un parser: legge il testo con regole posizionali (formato fisso) e regex (formato libero/CL).
  * Le righe sono quelle di SRCDTA con le colonne originali (col. 6 = tipo di specifica RPG). */
+import { t as tr } from './i18n.js';
 
 export type RefKind = 'file' | 'programma' | 'procedura' | 'copy' | 'dataarea' | 'tabella_sql' | 'comando' | 'formato_record' | 'chiave';
 
@@ -165,11 +166,11 @@ function cl(lines: string[], c: Collector): void {
     for (const m of body.matchAll(/\bCALL\s+(?!PGM\()([A-Za-z0-9_#@$]+(?:\/[A-Za-z0-9_#@$]+)?)/gi)) c.add('programma', m[1], no, 'CALL');
     for (const m of body.matchAll(/\bDCLF\s+FILE\(\s*([^)\s]+)\s*\)/gi)) c.add('file', m[1], no, 'DCLF');
     for (const m of body.matchAll(/\b(OVR(?:DBF|PRTF|DSPF))\b[^]*?\bTOFILE\(\s*([^)\s]+)\s*\)/gi)) c.add('file', m[2], no, m[1].toUpperCase());
-    for (const m of body.matchAll(/\bFROMFILE\(\s*([^)\s]+)\s*\)/gi)) c.add('file', m[1], no, 'CPYF origine');
+    for (const m of body.matchAll(/\bFROMFILE\(\s*([^)\s]+)\s*\)/gi)) c.add('file', m[1], no, tr({ it: 'CPYF origine', en: 'CPYF source' }));
     if (/\bCPY(?:F|FRMIMPF|TOIMPF|FRMSTMF|TOSTMF)\b/i.test(body)) {
-      for (const m of body.matchAll(/\bTOFILE\(\s*([^)\s]+)\s*\)/gi)) c.add('file', m[1], no, 'CPYF destinazione');
+      for (const m of body.matchAll(/\bTOFILE\(\s*([^)\s]+)\s*\)/gi)) c.add('file', m[1], no, tr({ it: 'CPYF destinazione', en: 'CPYF target' }));
     }
-    for (const m of body.matchAll(/\b(?:DLTF|CLRPFM|RGZPFM|CHKOBJ|DSPFD|DSPFFD|CRTDUPOBJ)\b[^]*?\b(?:FILE|OBJ)\(\s*([^)\s&]+)\s*\)/gi)) c.add('file', m[1], no, 'comando su file');
+    for (const m of body.matchAll(/\b(?:DLTF|CLRPFM|RGZPFM|CHKOBJ|DSPFD|DSPFFD|CRTDUPOBJ)\b[^]*?\b(?:FILE|OBJ)\(\s*([^)\s&]+)\s*\)/gi)) c.add('file', m[1], no, tr({ it: 'comando su file', en: 'command on file' }));
     for (const m of body.matchAll(/\bDTAARA\(\s*([^)\s&]+)\s*\)/gi)) c.add('dataarea', m[1], no);
     for (const m of body.matchAll(/\bSBMJOB\b[^]*?\bJOB\(\s*([^)\s]+)\s*\)/gi)) c.add('comando', 'SBMJOB', no, `job ${m[1].toUpperCase()}`);
     if (cmd && !CL_CONTROL.has(cmd) && !/^[A-Z]+\(/.test(cmd)) c.add('comando', cmd, no);

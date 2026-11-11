@@ -1,4 +1,5 @@
 /* Decodifica dei byte ASCII restituiti dalla trasformazione degli spool (Host Print Transform). */
+import { t } from './i18n.js';
 
 // CP850 (IBM PC multilingue): 0x80..0xFF
 const CP850_HIGH =
@@ -24,7 +25,10 @@ export function decodeBytes(bytes: Uint8Array, charset: string): string {
   try {
     return new TextDecoder(cs === 'latin1' ? 'windows-1252' : cs).decode(bytes);
   } catch {
-    throw new Error(`Charset spool non supportato: '${charset}' (usa cp850, latin1, windows-1252, utf-8)`);
+    throw new Error(t({
+      it: "Charset spool non supportato: '{charset}' (usa cp850, latin1, windows-1252, utf-8)",
+      en: "Unsupported spool charset: '{charset}' (use cp850, latin1, windows-1252, utf-8)",
+    }, { charset }));
   }
 }
 

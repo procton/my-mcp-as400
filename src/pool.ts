@@ -1,5 +1,6 @@
 import * as jt400ns from 'node-jt400';
 import { getConfig, parseJdbcExtra, type Config } from './config.js';
+import { t, type Msg } from './i18n.js';
 
 /* node-jt400 è un pacchetto dual-mode: gestisce sia l'esport di default di CommonJS
  * che l'esport nominale `pool` dell'edizione ESM. */
@@ -39,12 +40,15 @@ export function getAliasPool(): any {
 }
 
 /** Rifiuta se la promessa non termina entro il timeout configurato. */
-export function withTimeout<T>(p: Promise<T>, ms: number, what: string): Promise<T> {
+export function withTimeout<T>(p: Promise<T>, ms: number, what: Msg): Promise<T> {
   let timer: NodeJS.Timeout;
-  const t = new Promise<never>((_, rej) => {
-    timer = setTimeout(() => rej(new Error(`Timeout (${ms} ms) su ${what}: operazione abbandonata`)), ms);
+  const limit = new Promise<never>((_, rej) => {
+    timer = setTimeout(() => rej(new Error(t({
+      it: 'Timeout ({ms} ms) su {what}: operazione abbandonata',
+      en: 'Timeout ({ms} ms) on {what}: operation abandoned',
+    }, { ms, what: t(what) }))), ms);
   });
-  return Promise.race([p, t]).finally(() => clearTimeout(timer));
+  return Promise.race([p, limit]).finally(() => clearTimeout(timer));
 }
 
 export interface QueryOpts {
@@ -55,7 +59,7 @@ export interface QueryOpts {
 
 export function sqlText(sql: string, params?: unknown[], opts?: QueryOpts): Promise<Record<string, unknown>[]> {
   const ms = getConfig().sqlTimeoutMs;
-  return withTimeout(getPool().query(sql, params ?? [], opts?.trim === false ? { trim: false } : undefined), ms, 'query SQL');
+  return withTimeout(getPool().query(sql, params ?? [], opts?.trim === false ? { trim: false } : undefined), ms, { it: 'query SQL', en: 'SQL query' });
 }
 
 /** Esegue una query e converte i valori "java" in tipi JSON-safe. */

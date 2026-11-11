@@ -5,6 +5,8 @@ process.env.AS400_HOST ??= 'test';
 process.env.AS400_USER ??= 'test';
 process.env.AS400_PASSWORD ??= 'test';
 
+const { setLocale } = await import('../src/i18n.js');
+setLocale('EN'); // deterministico: non dipende dal LOCALE del .env
 const { parseJdbcExtra, objName, ifsPath } = await import('../src/config.js');
 const { likeRegex, numberLines, capText } = await import('../src/tools/common.js');
 const { nameCond } = await import('../src/tools/catalog.js');
@@ -49,7 +51,13 @@ test('likeRegex', () => {
 test('numberLines / capText', () => {
   assert.equal(numberLines(['a', 'b'], 9), ' 9| a\n10| b');
   assert.equal(capText('abc', 5), 'abc');
-  assert.match(capText('abcdef', 3, 'x'), /^abc\n\.\.\.\[x troncato: 3/);
+  assert.match(capText('abcdef', 3, { it: 'x', en: 'x' }), /^abc\n\.\.\.\[x truncated: 3 characters omitted/);
+  setLocale('IT');
+  try {
+    assert.match(capText('abcdef', 3, { it: 'x', en: 'x' }), /^abc\n\.\.\.\[x troncato: 3 caratteri omessi/);
+  } finally {
+    setLocale('EN');
+  }
 });
 
 test('jsonify', () => {

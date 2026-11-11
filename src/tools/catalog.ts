@@ -1,13 +1,10 @@
 import { z } from 'zod';
 import { normalizedQuery } from '../pool.js';
 import { getConfig, objName } from '../config.js';
-import { json, tool, pick } from './common.js';
+import { t, paramName } from '../i18n.js';
+import { json, tool, pick, tableTypeLabel } from './common.js';
 import type { ToolResult } from './common.js';
 import { likeP } from '../pool.js';
-
-const TIPI_TABELLA: Record<string, string> = {
-  T: 'tabella SQL', P: 'file fisico (PF)', L: 'file logico (LF)', V: 'vista', M: 'MQT', A: 'alias',
-};
 
 /** Condizione di confronto nome: `=` se il pattern non ha jolly (le colonne CHAR sono con spazi di riempimento
  * e `LIKE 'ABC'` non le trova), altrimenti `LIKE`. */
@@ -23,16 +20,22 @@ function cap(requested: number | undefined): number {
 
 function limited<T>(rows: T[], limite: number): { righe: T[]; nota?: string } {
   return rows.length >= limite
-    ? { righe: rows, nota: `raggiunto il limite di ${limite} risultati: restringi il filtro o aumenta 'limite'` }
+    ? {
+        righe: rows,
+        nota: t({
+          it: "raggiunto il limite di {n} risultati: restringi il filtro o aumenta '{limite}'",
+          en: "reached the limit of {n} results: narrow the filter or raise '{limite}'",
+        }, { n: limite, limite: paramName('limite') }),
+      }
     : { righe: rows };
 }
 
-const limiteSchema = z.number().int().min(1).optional().describe('Numero massimo di risultati (default 200, tetto SQL_MAX_ROWS)');
+const limiteSchema = z.number().int().min(1).optional();
 
 /* ---------- schemi / librerie ---------- */
 
 const inputSchemas = {
-  filtro: z.string().optional().describe('Filtro nome libreria (SQL LIKE: % e _); default tutte'),
+  filtro: z.string().optional(),
   limite: limiteSchema,
 };
 
@@ -62,11 +65,10 @@ export const schemaList = tool<z.infer<z.ZodObject<typeof inputSchemas>>>('as400
 /* ---------- tabelle / viste / file ---------- */
 
 const inputTables = {
-  libreria: z.string().describe('Libreria (max 10 caratteri)'),
-  tipo: z.enum(['tutti', 'fisici', 'logici', 'viste', 'sorgenti']).optional()
-    .describe("Tipo: 'fisici' (tabelle e PF), 'logici' (LF), 'viste', 'sorgenti' (file sorgente); default tutti"),
-  filtro: z.string().optional().describe('Filtro sul nome (SQL LIKE: % e _), su nome di sistema o SQL'),
-  testo: z.string().optional().describe('Cerca nella descrizione del file (sottostringa, senza distinzione maiuscole)'),
+  libreria: z.string(),
+  tipo: z.enum(['tutti', 'fisici', 'logici', 'viste', 'sorgenti']).optional(),
+  filtro: z.string().optional(),
+  testo: z.string().optional(),
   limite: limiteSchema,
 };
 
@@ -104,7 +106,7 @@ export const tableList = tool<z.infer<z.ZodObject<typeof inputTables>>>('as400_t
     return {
       file: sysName,
       nome_sql: sqlName !== sysName ? sqlName : undefined,
-      tipo: pick(r, 'FILE_TYPE') === 'S' ? 'file sorgente' : (TIPI_TABELLA[tt] ?? tt),
+      tipo: pick(r, 'FILE_TYPE') === 'S' ? t({ it: 'file sorgente', en: 'source file' }) : (tableTypeLabel(tt) ?? tt),
       descrizione: pick(r, 'TABLE_TEXT') ?? null,
       campi: pick(r, 'COLUMN_COUNT') ?? null,
       lunghezza_record: pick(r, 'ROW_LENGTH') ?? null,
@@ -118,15 +120,20 @@ export const tableList = tool<z.infer<z.ZodObject<typeof inputTables>>>('as400_t
 /* ---------- ricerca campi ---------- */
 
 const inputColumns = {
-  libreria: z.string().describe('Libreria in cui cercare (max 10 caratteri)'),
-  campo: z.string().optional().describe('Filtro nome campo (SQL LIKE; nome breve di sistema o nome lungo SQL)'),
-  testo: z.string().optional().describe('Cerca nella descrizione/intestazione del campo (sottostringa)'),
-  file: z.string().optional().describe('Restringe ai file con questo nome (SQL LIKE)'),
+  libreria: z.string(),
+  campo: z.string().optional(),
+  testo: z.string().optional(),
+  file: z.string().optional(),
   limite: limiteSchema,
 };
 
 export const columnSearch = tool<z.infer<z.ZodObject<typeof inputColumns>>>('as400_column_search', async (args): Promise<ToolResult> => {
-  if (!args.campo && !args.testo) throw new Error("Indica almeno 'campo' o 'testo' (le scansioni senza filtro sono molto lente)");
+  if (!args.campo && !args.testo) {
+    throw new Error(t({
+      it: "Indica almeno '{campo}' o '{testo}' (le scansioni senza filtro sono molto lente)",
+      en: "Provide at least '{campo}' or '{testo}' (unfiltered scans are very slow)",
+    }, { campo: paramName('campo'), testo: paramName('testo') }));
+  }
   const lib = objName(args.libreria, 'libreria');
   const lim = cap(args.limite);
   const ff = nameCond('SYSTEM_TABLE_NAME', args.file);
@@ -140,8 +147,8 @@ export const columnSearch = tool<z.infer<z.ZodObject<typeof inputColumns>>>('as4
   }
   if (args.testo) {
     where += ' AND (UPPER(COLUMN_TEXT) LIKE ? OR UPPER(COLUMN_HEADING) LIKE ?)';
-    const t = `%${args.testo.trim().toUpperCase()}%`;
-    params.push(t, t);
+    const like = `%${args.testo.trim().toUpperCase()}%`;
+    params.push(like, like);
   }
   const rows = await normalizedQuery(
     `SELECT SYSTEM_TABLE_NAME, SYSTEM_COLUMN_NAME, COLUMN_NAME, DATA_TYPE, LENGTH, NUMERIC_SCALE, COLUMN_TEXT, COLUMN_HEADING
@@ -223,7 +230,7 @@ async function dependents(lib: string, file: string, max: number, withKeys: bool
     const so = pick(r, 'SO');
     const d: Dependent = {
       oggetto: name,
-      tipo: isSqlIdx ? 'indice SQL' : (TIPI_TABELLA[tt] ?? (tt || null)),
+      tipo: isSqlIdx ? t({ it: 'indice SQL', en: 'SQL index' }) : (tableTypeLabel(tt) ?? (tt || null)),
       descrizione: String(pick(r, 'TESTO') ?? pick(r, 'XTESTO') ?? '') || null,
       formato: pick(r, 'FORMATO') ?? null,
     };
@@ -238,8 +245,8 @@ async function dependents(lib: string, file: string, max: number, withKeys: bool
 /* ---------- indici e logici con chiavi ---------- */
 
 const inputFile = {
-  libreria: z.string().describe('Libreria del file (max 10 caratteri)'),
-  file: z.string().describe('Nome del file fisico/tabella (max 10 caratteri)'),
+  libreria: z.string(),
+  file: z.string(),
 };
 
 export const indexList = tool<z.infer<z.ZodObject<typeof inputFile>>>('as400_index_list', async (args): Promise<ToolResult> => {
@@ -298,7 +305,10 @@ export const whereUsed = tool<z.infer<z.ZodObject<typeof inputFile>>>('as400_whe
     logici_indici_e_viste_che_lo_usano: dip,
     tabelle_figlie_foreign_key: figli,
     trigger,
-    nota: 'I programmi (RPG/CL) che usano il file non sono rilevabili dal catalogo SQL.',
+    nota: t({
+      it: 'I programmi (RPG/CL) che usano il file non sono rilevabili dal catalogo SQL.',
+      en: 'Programs (RPG/CL) that use the file cannot be detected from the SQL catalog.',
+    }),
   });
 });
 
@@ -312,7 +322,7 @@ export const viewDef = tool<z.infer<z.ZodObject<typeof inputFile>>>('as400_view_
        FROM QSYS2.SYSVIEWS WHERE SYSTEM_VIEW_SCHEMA = ? AND SYSTEM_VIEW_NAME = ?`,
     [lib, file],
   );
-  if (rows.length === 0) throw new Error(`Vista non trovata: ${lib}/${file}`);
+  if (rows.length === 0) throw new Error(t({ it: 'Vista non trovata: {lib}/{file}', en: 'View not found: {lib}/{file}' }, { lib, file }));
   const r = rows[0];
   return json({
     libreria: lib, vista: file, nome_sql: pick(r, 'TABLE_NAME'),
@@ -367,9 +377,9 @@ export const constraints = tool<z.infer<z.ZodObject<typeof inputFile>>>('as400_c
 /* ---------- procedure e funzioni ---------- */
 
 const inputRoutines = {
-  libreria: z.string().describe('Libreria (max 10 caratteri)'),
-  tipo: z.enum(['procedure', 'funzioni', 'tutte']).optional().describe('Default tutte'),
-  filtro: z.string().optional().describe('Filtro sul nome (SQL LIKE)'),
+  libreria: z.string(),
+  tipo: z.enum(['procedure', 'funzioni', 'tutte']).optional(),
+  filtro: z.string().optional(),
   limite: limiteSchema,
 };
 

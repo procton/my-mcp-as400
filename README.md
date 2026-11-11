@@ -11,11 +11,8 @@ Built on `node-jt400` (JDBC JT400 through a Java bridge): requires **Node >= 22*
 Tested on **IBM i 7.4**. To check compatibility with other releases, run **npm run test:e2e**
 (see section 9 of the [troubleshooting guide](docs/TROUBLESHOOTING.md#9-ibm-i-releases-earlier-than-74)).
 
-> **Language of the server.** Tool names are in English, but the server's tool descriptions, result field names
-> (for example `libreria`, `righe`, `elenco`), error messages, prompt names and prompt texts are in Italian,
-> as are the names of many tool parameters (`libreria`, `file`, `membro`, `percorso`, `daRiga`, ...).
-> Names are given exactly as the server exposes them in the tables below.
-> The [troubleshooting guide](docs/TROUBLESHOOTING.md) quotes the Italian error messages literally, with their meaning in English.
+> **Language.** The server speaks English by default. Set `LOCALE=IT` in the `.env` for Italian tool descriptions,
+> parameter names, messages and prompts. See [Language](#language-locale).
 
 ## Available tools
 
@@ -46,7 +43,7 @@ Tested on **IBM i 7.4**. To check compatibility with other releases, run **npm r
 | `as400_spool_list` | queues of a library (with file counts) or spooled files of a queue, newest first |
 | `as400_spool_search` | spooled files across all queues by user, name, job, USRDTA, status, type, date range |
 | `as400_spool_info` | full attributes of a spooled file (pages, copies, form type, fonts, overlays, ...) |
-| `as400_spool_read` | content of a spooled file (SCS, AFPDS, LINE, USERASCII) as text, with `daPagina`/`aPagina` (from page / to page) |
+| `as400_spool_read` | content of a spooled file (SCS, AFPDS, LINE, USERASCII) as text, with `fromPage`/`toPage` |
 | `as400_dds_describe` | structure of PF/LF/DSPF/PRTF from the DDS source: formats, fields, positions, keys, keywords |
 
 ## MCP resources
@@ -55,7 +52,7 @@ Besides tools, the server exposes resources that the client can attach to the co
 
 | URI | Content |
 |---|---|
-| `as400://sistema` | user, IBM i version and active limits (JSON) |
+| `as400://system` | user, IBM i version and active limits (JSON) |
 | `as400://source/{lib}/{file}/{member}` | text of a source member, with the original columns |
 | `as400://file/{lib}/{name}` | JSON description of a file (fields, types, DDS key) |
 | `as400://ifs/{path}` | IFS text file, e.g. `as400://ifs/home/profile/script.sh` |
@@ -67,13 +64,97 @@ Resources use the same logic as the tools, so `ALLOWED_LIBS`, `IFS_ALLOWED_PREFI
 
 | Prompt | What it asks the model to do |
 |---|---|
-| `spiega_programma` | read an RPG/CL source, analyze its references and explain purpose, flow and anomalies |
-| `documenta_libreria` | produce a Markdown document with the programs, files and dependencies of a library |
-| `analizza_file` | explain a file: fields, keys, logicals, constraints, sample data, who uses it |
-| `dove_e_usato` | find where a file, field, program or data area is used |
-| `analizza_spool` | find and read spooled files and joblogs, and summarize the errors |
-| `interroga_dati` | answer a question about the data: find the right files and fields, write a read-only SELECT, run it and report the answer, the query and the assumptions |
-| `spiega_stampa` | describe the layout of a PRTF/DSPF and compare it with real spooled files |
+| `explain_program` | read an RPG/CL source, analyze its references and explain purpose, flow and anomalies |
+| `document_library` | produce a Markdown document with the programs, files and dependencies of a library |
+| `analyze_file` | explain a file: fields, keys, logicals, constraints, sample data, who uses it |
+| `find_usages` | find where a file, field, program or data area is used |
+| `analyze_spool` | find and read spooled files and joblogs, and summarize the errors |
+| `query_data` | answer a question about the data: find the right files and fields, write a read-only SELECT, run it and report the answer, the query and the assumptions |
+| `explain_print_file` | describe the layout of a PRTF/DSPF and compare it with real spooled files |
+
+## Language (`LOCALE`)
+
+The server speaks English by default. Set `LOCALE` in the `.env` to choose:
+
+| `LOCALE` | Effect |
+|---|---|
+| `EN` (default, also when missing or empty) | tool/prompt/resource descriptions, parameter names, result keys, error messages and prompt texts in English |
+| `IT` | the same, in Italian |
+
+The value is case-insensitive (`it`, `IT`); anything else stops the server at startup with an explanatory message.
+Tool names are always the same (`as400_...`). The language is decided once, at startup: restart the client after changing it.
+
+> **Upgrading from a version without `LOCALE`.** The server used to be Italian only. Without `LOCALE` it is now English, so
+> parameter names, prompt names and result keys change. To keep the previous behavior set `LOCALE=IT`.
+
+What changes with the language (Italian names are the old ones):
+
+**Parameter names** (the ones not listed are the same in both languages, e.g. `file`, `outq`, `job`, `query`, `offset`, `utf8`):
+
+| `EN` | `IT` |
+|---|---|
+| `library` | `libreria` |
+| `member` | `membro` |
+| `filter` | `filtro` |
+| `path` | `percorso` |
+| `lineNumbers` | `numeriRiga` |
+| `fromLine` | `daRiga` |
+| `toLine` | `aRiga` |
+| `text` | `testo` |
+| `type` | `tipo` |
+| `limit` | `limite` |
+| `maxMembers` | `maxMembri` |
+| `caseSensitive` | `maiuscole` |
+| `parameters` | `parametri` |
+| `field` | `campo` |
+| `user` | `utente` |
+| `number` | `numero` |
+| `fromPage` | `daPagina` |
+| `toPage` | `aPagina` |
+| `clean` | `pulisci` |
+| `status` | `stato` |
+| `userData` | `datiUtente` |
+| `from` | `dal` |
+| `to` | `al` |
+| `object` | `oggetto` |
+| `attribute` | `attributo` |
+| `depth` | `profondita` |
+| `maxEntries` | `maxVoci` |
+| `length` | `lunghezza` |
+| `maxFiles` | `maxFile` |
+| `maxFileBytes` | `maxByteFile` |
+| `question` | `domanda` |
+| `name` | `nome` |
+| `date` | `data` |
+
+**Enumerated values:**
+
+| Tool, parameter | `EN` | `IT` |
+|---|---|---|
+| `as400_table_list`, `type` | `all`, `physical`, `logical`, `views`, `sources` | `tutti`, `fisici`, `logici`, `viste`, `sorgenti` |
+| `as400_routine_list`, `type` | `procedures`, `functions`, `all` | `procedure`, `funzioni`, `tutte` |
+| `as400_ifs_list`, `type` | `all`, `file`, `directory` | `tutti`, `file`, `directory` |
+
+**Prompts:**
+
+| `EN` | `IT` |
+|---|---|
+| `explain_program` | `spiega_programma` |
+| `document_library` | `documenta_libreria` |
+| `analyze_file` | `analizza_file` |
+| `find_usages` | `dove_e_usato` |
+| `analyze_spool` | `analizza_spool` |
+| `query_data` | `interroga_dati` |
+| `explain_print_file` | `spiega_stampa` |
+
+**Resources:** only the system one changes: `as400://system` (`EN`) / `as400://sistema` (`IT`).
+
+**Result keys** follow the language too (for example `library`/`libreria`, `list`/`elenco`, `note`/`nota`, `total_lines`/`righe_totali`,
+`dds_key`/`chiave_dds`, `source`/`sorgente`, `found`/`trovate`). The complete mapping is the `KEYS_EN` table in
+[`src/i18n.ts`](src/i18n.ts). The `data` rows returned by `as400_sql_query` are your table rows and are never translated.
+
+Not affected by `LOCALE`: the text of IBM i objects (descriptions, spooled file content, sources) and the messages produced by IBM i
+itself (SQL errors, `CPF` messages), which use the language of the job on the server.
 
 ## Configuration
 
@@ -83,7 +164,7 @@ chmod 600 .env          # credentials stay local
 # fill in AS400_HOST / AS400_USER / AS400_PASSWORD
 ```
 
-Optional variables: `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
+Optional variables: `LOCALE` (`EN` or `IT`, default `EN`), `SQL_MAX_ROWS`, `SOURCE_MAX_LINES`, `IFS_MAX_LINES`, `IFS_MAX_CHARS`,
 `SPOOL_MAX_FILES`, `SPOOL_MAX_CHARS`, `SOURCE_MAX_CHARS`, `SOURCE_MAX_MEMBERS`,
 `SPOOL_CHARSET` (ASCII charset of the spool text after conversion, default `cp850`),
 `SPOOL_WSCST` (WSCST object used for the conversion, default `/QSYS.LIB/QWPDEFAULT.WSCST`), `SPOOL_MAX_READ_BYTES`,
@@ -100,7 +181,8 @@ npm run build
 npm run test:connection
 npm test            # unit tests (no connection needed)
 npm run typecheck
-npm run test:e2e    # starts the server and exercises it with an MCP client (needs the IBM i connection)
+npm run test:e2e    # starts the server and exercises it with an MCP client, in both languages (needs the IBM i connection)
+                    # E2E_LOCALE=EN or E2E_LOCALE=IT limits it to one language
 ```
 
 ## Integrating with MCP clients
@@ -205,7 +287,7 @@ level). If you edit the file by hand, use the format written by the `opencode mc
 
   | Resource | Equivalent tool |
   |---|---|
-  | `as400://sistema` | `as400_system_info` |
+  | `as400://system` | `as400_system_info` |
   | `as400://source/{lib}/{file}/{member}` | `as400_source_read` |
   | `as400://file/{lib}/{name}` | `as400_file_desc` |
   | `as400://ifs/{path}` | `as400_ifs_read` |

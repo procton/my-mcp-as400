@@ -7,6 +7,12 @@ Guida ai problemi più comuni di `my-mcp-as400`. Torna al [README](../README.it.
 Le soluzioni qui sotto vengono da casi incontrati durante lo sviluppo, verificati su un IBM i V7R4. Dove una cosa non è stata
 provata su altre release (in particolare la 7.3) è detto esplicitamente.
 
+> **Nomi e messaggi.** La lingua del server si sceglie con `LOCALE` nel `.env` (`EN` per impostazione predefinita, oppure `IT`).
+> Questa guida cita i nomi (parametri, chiavi dei risultati) e i messaggi **in italiano**, cioè quelli che si ottengono con `LOCALE=IT`.
+> Senza `LOCALE=IT` il server usa i nomi e i messaggi inglesi: vedi la [guida inglese](TROUBLESHOOTING.md) e la tabella dei nomi
+> nel [README](../README.it.md#lingua-locale). I messaggi prodotti da IBM i stesso (errori SQL, messaggi `CPF`) sono nella lingua del
+> job sul server, qualunque sia `LOCALE`.
+
 ## Indice
 
 1. [Da dove cominciare](#1-da-dove-cominciare)
@@ -211,6 +217,7 @@ SELECT COUNT(*) FROM QSYS2.SYSTABLES WHERE SYSTEM_TABLE_SCHEMA = 'LIBRERIA'
 | `Percorso IFS non valido (deve essere assoluto)` o `componente '..' vietata` | Usa percorsi assoluti senza `..`. |
 | `Tipo oggetto non valido: 'x'` | I tipi si scrivono con l'asterisco: `*PGM`, `*SRVPGM`, `*DTAARA`. |
 | `La ricerca non è disponibile nei file system speciali` | In `/QSYS.LIB`, `/QDLS`, ... usa `as400_source_search` e `as400_object_list`. |
+| `Invalid LOCALE 'xx': allowed values are IT or EN ...` / `Valore LOCALE non valido 'xx': ...` (all'avvio) | `LOCALE` nel `.env` deve essere `IT` o `EN` (senza distinzione di maiuscole), oppure vuota/assente per `EN`. |
 
 ---
 

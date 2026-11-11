@@ -4,6 +4,7 @@
  * | 17 tipo nome (R formato, K chiave, J join, S select, O omit) | 19-28 nome | 29 'R' riferimento
  * | 30-34 lunghezza | 35 tipo dati | 36-37 decimali | 38 uso (B/I/O/H/P/M) | 39-41 riga | 42-44 posizione
  * | 45-80 funzioni (parole chiave); '+' / '-' finale = continuazione. */
+import { t, type Msg } from './i18n.js';
 
 export interface DdsKeyword {
   nome: string;
@@ -62,14 +63,28 @@ export interface DdsFile {
   join: string[];
 }
 
-const TYPE_NAMES: Record<string, string> = {
-  A: 'carattere', S: 'zoned', P: 'packed', B: 'binario', F: 'virgola mobile', H: 'esadecimale',
-  L: 'data', T: 'ora', Z: 'timestamp', '5': 'DBCS-aperto', J: 'DBCS-solo', E: 'DBCS-misto', O: 'DBCS-aperto', G: 'grafico',
-};
+/** Nome del tipo dati DDS (colonna 35) nella lingua scelta. */
+function typeName(code: string): string | undefined {
+  const m: Record<string, Msg> = {
+    A: { it: 'carattere', en: 'character' }, S: { it: 'zoned', en: 'zoned' }, P: { it: 'packed', en: 'packed' },
+    B: { it: 'binario', en: 'binary' }, F: { it: 'virgola mobile', en: 'floating point' },
+    H: { it: 'esadecimale', en: 'hexadecimal' }, L: { it: 'data', en: 'date' }, T: { it: 'ora', en: 'time' },
+    Z: { it: 'timestamp', en: 'timestamp' }, '5': { it: 'DBCS-aperto', en: 'DBCS-open' },
+    J: { it: 'DBCS-solo', en: 'DBCS-only' }, E: { it: 'DBCS-misto', en: 'DBCS-either' },
+    O: { it: 'DBCS-aperto', en: 'DBCS-open' }, G: { it: 'grafico', en: 'graphic' },
+  };
+  return m[code] ? t(m[code]) : undefined;
+}
 
-const USAGE_NAMES: Record<string, string> = {
-  B: 'input/output', I: 'input', O: 'output', H: 'nascosto', P: 'programma-sistema', M: 'messaggio',
-};
+/** Nome dell'uso di un campo DDS (colonna 38) nella lingua scelta. */
+function usageName(code: string): string | undefined {
+  const m: Record<string, Msg> = {
+    B: { it: 'input/output', en: 'input/output' }, I: { it: 'input', en: 'input' }, O: { it: 'output', en: 'output' },
+    H: { it: 'nascosto', en: 'hidden' }, P: { it: 'programma-sistema', en: 'program-to-system' },
+    M: { it: 'messaggio', en: 'message' },
+  };
+  return m[code] ? t(m[code]) : undefined;
+}
 
 /** Estrae le parole chiave (NOME o NOME(argomenti)) da un testo, rispettando apici e parentesi annidate. */
 export function parseKeywords(text: string): DdsKeyword[] {
@@ -244,16 +259,16 @@ export function parseDds(lines: string[]): DdsFile {
       // nuovo campo (se ancora non c'è un formato, i campi appartengono a un formato implicito)
       flush();
       if (!curFmt) {
-        curFmt = { nome: '(implicito)', riga_sorgente: 0, parole_chiave: [], campi: [], costanti: [] };
+        curFmt = { nome: t({ it: '(implicito)', en: '(implicit)' }), riga_sorgente: 0, parole_chiave: [], campi: [], costanti: [] };
         file.formati.push(curFmt);
       }
       const f: DdsField = { nome: name, parole_chiave: [] };
       const len = num(lenS);
       if (len !== undefined) f.lunghezza = len;
-      if (typ || len !== undefined) f.tipo = TYPE_NAMES[typ || (dec.trim() ? 'S' : 'A')] ?? typ;
+      if (typ || len !== undefined) f.tipo = typeName(typ || (dec.trim() ? 'S' : 'A')) ?? typ;
       const d = num(dec);
       if (d !== undefined) f.decimali = d;
-      if (usage) f.uso = USAGE_NAMES[usage] ?? usage;
+      if (usage) f.uso = usageName(usage) ?? usage;
       if (ln !== undefined) f.riga = ln;
       if (ps !== undefined) f.posizione = ps;
       if (line[28].toUpperCase() === 'R') f.da_riferimento = true;

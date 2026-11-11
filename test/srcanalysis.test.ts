@@ -1,6 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { extractRefs, familyOf } from '../src/srcanalysis.js';
+import { setLocale } from '../src/i18n.js';
+
+setLocale('EN'); // deterministico: non dipende dal LOCALE del .env
 
 const names = (refs: ReturnType<typeof extractRefs>, tipo: string): string[] => refs.filter((r) => r.tipo === tipo).map((r) => r.nome).sort();
 
