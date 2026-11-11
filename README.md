@@ -16,6 +16,14 @@ Basato su `node-jt400` (JDBC JT400 via bridge Java): richiede **Node >= 22** e *
 | `as400_ifs_read` | file di testo IFS |
 | `as400_sql_query` | SELECT read-only su PF/LF e viste QSYS2 |
 | `as400_file_desc` | descrizione PF/LF: campi, chiavi, tipo |
+| `as400_schema_list` | librerie/schemi con descrizione e proprietario |
+| `as400_table_list` | file di una libreria: PF/tabelle, LF, viste, sorgenti; filtri su nome, tipo e descrizione |
+| `as400_column_search` | ricerca campi per nome (breve/lungo) o testo in una libreria |
+| `as400_index_list` | chiave DDS di un file, logici/indici/viste che lo usano, con chiavi e formato record |
+| `as400_where_used` | dipendenze di un file: logici, viste, foreign key figlie, trigger |
+| `as400_view_def` | definizione SQL di una vista |
+| `as400_constraints` | PK, univoci, check, foreign key |
+| `as400_routine_list` | procedure e funzioni SQL/esterne di una libreria |
 | `as400_spool_list` | file di spool per outq / utente / filtro |
 | `as400_spool_read` | contenuto testuale di un file di spool |
 

@@ -49,15 +49,17 @@ export const fileDesc = tool<
   const obj = objs[0];
 
   const srcRows = await normalizedQuery(
-    `SELECT FILE_TYPE FROM QSYS2.SYSTABLES WHERE SYSTEM_TABLE_SCHEMA = ? AND SYSTEM_TABLE_NAME = ?`,
+    `SELECT FILE_TYPE, TABLE_TYPE FROM QSYS2.SYSTABLES WHERE SYSTEM_TABLE_SCHEMA = ? AND SYSTEM_TABLE_NAME = ?`,
     [lib, file],
   );
   const fileType = String(pick(srcRows[0] ?? {}, 'FILE_TYPE') ?? '');
+  const tableType = String(pick(srcRows[0] ?? {}, 'TABLE_TYPE') ?? '');
+  const TIPI: Record<string, string> = { T: 'tabella SQL', P: 'file fisico (PF)', L: 'file logico (LF)', V: 'vista', M: 'MQT', A: 'alias' };
 
   const cols = await normalizedQuery(
     `SELECT SYSTEM_COLUMN_NAME AS CAMPO, ORDINAL_POSITION AS POS,
             DATA_TYPE AS TIPO, LENGTH AS LUNGHEZZA, NUMERIC_SCALE AS DECIMALI,
-            IS_NULLABLE AS NULL_ABLE, COLUMN_DEFAULT AS DEFAULT_
+            IS_NULLABLE AS NULL_ABLE, COLUMN_TEXT AS DESCRIZIONE, COLUMN_HEADING AS INTESTAZIONE, CCSID
        FROM QSYS2.SYSCOLUMNS
       WHERE SYSTEM_TABLE_SCHEMA = ? AND SYSTEM_TABLE_NAME = ?
       ORDER BY ORDINAL_POSITION`,
@@ -65,22 +67,34 @@ export const fileDesc = tool<
   );
 
   const keys = await normalizedQuery(
-    `SELECT CONSTRAINT_NAME AS CHIAVE, COLUMN_NAME AS CAMPO, ORDINAL_POSITION AS POS
+    `SELECT CONSTRAINT_NAME AS CHIAVE, SYSTEM_COLUMN_NAME AS CAMPO, ORDINAL_POSITION AS POS
        FROM QSYS2.SYSKEYCST
-      WHERE TABLE_SCHEMA = ? AND TABLE_NAME = ?
+      WHERE SYSTEM_TABLE_SCHEMA = ? AND SYSTEM_TABLE_NAME = ?
       ORDER BY CONSTRAINT_NAME, ORDINAL_POSITION`,
     [lib, file],
   );
 
+  // chiave DDS del file (PF con chiave): non compare in SYSKEYCST
+  let chiaveDds: unknown[] = [];
+  try {
+    const kr = await normalizedQuery(
+      `SELECT DBKFLD, DBKORD FROM QSYS.QADBKFLD WHERE DBKLIB = ? AND DBKFIL = ? ORDER BY DBKPOS`,
+      [lib, file],
+    );
+    chiaveDds = kr.map((r) => ({ campo: pick(r, 'DBKFLD'), ordine: pick(r, 'DBKORD') === 'D' ? 'DESC' : 'ASC' }));
+  } catch { /* non fatale */ }
+
   return json({
     libreria: lib,
     file,
-    tipo: fileType === 'S' ? 'FILE SORGENTE (usa as400_source_list / as400_source_read)' : fileType,
+    tipo: fileType === 'S' ? 'FILE SORGENTE (usa as400_source_list / as400_source_read)' : (TIPI[tableType] ?? tableType),
     descrizione: pick(obj, 'OBJTEXT') ?? null,
     creato: pick(obj, 'OBJCREATED') ?? null,
     ultimo_uso: pick(obj, 'LAST_USED_TIMESTAMP') ?? null,
     campi: cols,
-    chiavi: keys,
+    chiave_dds: chiaveDds,
+    vincoli_chiave: keys,
+    dettagli_oggetti: 'usa as400_index_list, as400_where_used, as400_constraints per logici, dipendenze e vincoli',
     esempio: `SELECT * FROM ${lib}.${file} FETCH FIRST 10 ROWS ONLY`,
   });
 });

@@ -9,6 +9,7 @@ import { ifsList, ifsRead } from './tools/ifs.js';
 import { sqlQuery, fileDesc } from './tools/sql.js';
 import { spoolList, spoolRead } from './tools/spool.js';
 import { systemInfo } from './tools/system.js';
+import { schemaList, tableList, columnSearch, indexList, whereUsed, viewDef, constraints, routineList } from './tools/catalog.js';
 
 const READ_ONLY = { readOnlyHint: true, openWorldHint: true } as const;
 
@@ -164,6 +165,117 @@ async function main(): Promise<void> {
       annotations: READ_ONLY,
     },
     spoolRead,
+  );
+
+  const LIB = z.string().describe('Libreria (max 10 caratteri)');
+  const FILE = z.string().describe('Nome del file/oggetto (max 10 caratteri)');
+  const LIMITE = z.number().int().min(1).optional().describe('Numero massimo di risultati (default 200, tetto SQL_MAX_ROWS)');
+
+  server.registerTool(
+    'as400_schema_list',
+    {
+      title: 'Elenca librerie',
+      description: 'Elenca le librerie/schemi (QSYS2.SYSSCHEMAS) con descrizione e proprietario; rispetta ALLOWED_LIBS.',
+      inputSchema: { filtro: z.string().optional().describe('Filtro nome libreria (SQL LIKE)'), limite: LIMITE },
+      annotations: READ_ONLY,
+    },
+    schemaList,
+  );
+
+  server.registerTool(
+    'as400_table_list',
+    {
+      title: 'Elenca file, tabelle e viste',
+      description:
+        'Elenca i file di una libreria dal catalogo SQL: PF/tabelle, LF, viste, file sorgente, con descrizione, numero campi e lunghezza record. Filtri per tipo, nome e testo della descrizione. Le librerie di produzione hanno migliaia di oggetti: usa i filtri.',
+      inputSchema: {
+        libreria: LIB,
+        tipo: z.enum(['tutti', 'fisici', 'logici', 'viste', 'sorgenti']).optional().describe("Default 'tutti'"),
+        filtro: z.string().optional().describe('Filtro nome (SQL LIKE)'),
+        testo: z.string().optional().describe('Sottostringa nella descrizione del file'),
+        limite: LIMITE,
+      },
+      annotations: READ_ONLY,
+    },
+    tableList,
+  );
+
+  server.registerTool(
+    'as400_column_search',
+    {
+      title: 'Cerca campi',
+      description:
+        'Cerca campi per nome (breve o lungo) e/o per testo/intestazione in tutti i file di una libreria. Utile per trovare dove compare un campo.',
+      inputSchema: {
+        libreria: LIB,
+        campo: z.string().optional().describe('Filtro nome campo (SQL LIKE)'),
+        testo: z.string().optional().describe('Sottostringa nella descrizione/intestazione del campo'),
+        file: z.string().optional().describe('Restringe ai file con questo nome (SQL LIKE)'),
+        limite: LIMITE,
+      },
+      annotations: READ_ONLY,
+    },
+    columnSearch,
+  );
+
+  server.registerTool(
+    'as400_index_list',
+    {
+      title: 'Indici e logici di un file',
+      description: 'Indici SQL e file logici con chiave basati su un file fisico: campi chiave e ordinamento, univocità; elenca anche i LF non indicizzati.',
+      inputSchema: { libreria: LIB, file: FILE },
+      annotations: READ_ONLY,
+    },
+    indexList,
+  );
+
+  server.registerTool(
+    'as400_where_used',
+    {
+      title: 'Dipendenze di un file',
+      description: 'Oggetti che dipendono da un file: viste, logici/indici, tabelle figlie via foreign key, trigger. Non rileva i programmi RPG/CL.',
+      inputSchema: { libreria: LIB, file: FILE },
+      annotations: READ_ONLY,
+    },
+    whereUsed,
+  );
+
+  server.registerTool(
+    'as400_view_def',
+    {
+      title: 'Definizione di una vista',
+      description: 'Testo SQL della definizione di una vista SQL (QSYS2.SYSVIEWS).',
+      inputSchema: { libreria: LIB, file: z.string().describe('Nome (di sistema) della vista') },
+      annotations: READ_ONLY,
+    },
+    viewDef,
+  );
+
+  server.registerTool(
+    'as400_constraints',
+    {
+      title: 'Vincoli di un file',
+      description: 'Chiave primaria, univoci, check e foreign key (con tabella referenziata e regole) di un file.',
+      inputSchema: { libreria: LIB, file: FILE },
+      annotations: READ_ONLY,
+    },
+    constraints,
+  );
+
+  server.registerTool(
+    'as400_routine_list',
+    {
+      title: 'Procedure e funzioni SQL',
+      description: 'Elenca procedure e funzioni (SQL ed esterne) di una libreria da QSYS2.SYSROUTINES.',
+      inputSchema: {
+        libreria: LIB,
+        tipo: z.enum(['procedure', 'funzioni', 'tutte']).optional().describe("Default 'tutte'"),
+        filtro: z.string().optional().describe('Filtro nome (SQL LIKE)'),
+        limite: LIMITE,
+      },
+      annotations: READ_ONLY,
+    },
+    routineList,
   );
 
   const transport = new StdioServerTransport();

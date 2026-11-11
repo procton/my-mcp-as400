@@ -56,3 +56,11 @@ test('jsonify', () => {
   assert.deepEqual(jsonify({ a: [1, undefined] }), { a: [1, null] });
   assert.equal(likeP(' ab '), 'AB');
 });
+
+const { nameCond } = await import('../src/tools/catalog.js');
+test('nameCond: = senza jolly (colonne CHAR), LIKE con jolly', () => {
+  assert.deepEqual(nameCond('C', 'abc'), { sql: 'C = ?', param: 'ABC' });
+  assert.deepEqual(nameCond('C', 'ab%'), { sql: 'C LIKE ?', param: 'AB%' });
+  assert.deepEqual(nameCond('C', 'a_c'), { sql: 'C LIKE ?', param: 'A_C' });
+  assert.deepEqual(nameCond('C', undefined), { sql: 'C LIKE ?', param: '%' });
+});

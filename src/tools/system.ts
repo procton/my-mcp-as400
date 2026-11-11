@@ -12,13 +12,14 @@ export const systemInfo = tool<Record<string, never>>('as400_system_info', async
   );
   let env: Record<string, unknown> | null = null;
   try {
-    const rows = await normalizedQuery(`SELECT * FROM SYSIBMADM.ENV_SYSINFO`);
+    const rows = await normalizedQuery(`SELECT * FROM SYSIBMADM.ENV_SYS_INFO`);
     if (rows.length > 0) {
       env = {
         host: pick(rows[0], 'HOST_NAME') ?? null,
         sistema_operativo: pick(rows[0], 'OS_NAME') ?? null,
-        versione_os: pick(rows[0], 'OS_VERSION') ?? null,
-        versione_db2: pick(rows[0], 'DB2_VERSION', 'VERSIONE') ?? null,
+        versione: `V${pick(rows[0], 'OS_VERSION') ?? '?'}R${pick(rows[0], 'OS_RELEASE') ?? '?'}`,
+        cpu: pick(rows[0], 'TOTAL_CPUS') ?? null,
+        memoria_mb: pick(rows[0], 'TOTAL_MEMORY') ?? null,
       };
     }
   } catch { /* vista non disponibile: non fatale */ }
